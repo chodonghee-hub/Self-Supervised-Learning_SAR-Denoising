@@ -1,6 +1,6 @@
 # SAR Image Noise Despeckling 
-since   2022. 07. 04 
-company GDL, HNU 
+### since   2022. 07. 04 
+### company GDL, HNU 
 
 # Noise2Self: Blind Denoising by Self-Supervision
 
