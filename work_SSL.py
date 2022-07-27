@@ -29,7 +29,7 @@ class SSupervised(object) :
         self.excel_file_path = ''
         self.target_excel = ''
         self.first_cell_info = 10
-        self.sheet_info_list = ['100%', '50%', '25%', '10%']
+        self.sheet_info_list = ['100%', '50%', '25%', '10%', '1%']
         self.cell_info_dict = dict()
         self.cell_update_dict = dict()
         self.csv_first_cell = 'C'
@@ -130,14 +130,15 @@ class SSupervised(object) :
                     np.round(best_psnr, 2)
                     print(" ( ! ) Update Model PSNR : ", np.round(best_psnr, 2))
 
-            if 0 in [i%(self.epoch*1), i%(self.epoch*0.5), i%(self.epoch*0.25), i%(self.epoch*0.1)] : 
-                for per in [1, 0.5, 0.25, 0.1] : 
+            # 100% 50% 25% 10% 1%
+            if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
+                for per in [1, 0.5, 0.25, 0.1, 0.01] : 
                     if i%(self.epoch*per) == 0 : 
                         self.__save_csv__(f'{int(per*100)}%', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
                         self.cell_update_dict[f'{int(per*100)}%'] += 1
 
-            # update information 
-            if i % 100 == 0 : 
+            # update information & check end of epoch 
+            if i % 100 == 0 or i+1 == self.epoch : 
                 print(f" ( {i}/{self.epoch} )", end = '')
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
@@ -152,7 +153,7 @@ class SSupervised(object) :
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
         
         plot_images(self.best_images)
-        plt.savefig(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/plot_images')
+        plt.savefig(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/plot_images.png')
 
 
     # =============================================
@@ -172,7 +173,7 @@ class SSupervised(object) :
     def __update_info__(self) : 
         print(f" {'○ Sheet Title'.ljust(23,' ')}", end = '')
         for key, val in self.cell_update_dict.items() : 
-            print(f"{key} ( {val} )".rjust(10,' '), end = '')
+            print(f"{key} ({val})".rjust(8,' '), end = '')
             self.cell_update_dict[key] = 0 
         print(f"\n ○ {'Save record at'.ljust(20, ' ')}{str(f'{self.excel_file_path}/{self.target_excel}').rjust(40, ' ')}\n\n")
     
@@ -200,7 +201,7 @@ class SSupervised(object) :
         ws[f'{self.cell_EPOCH}{cell_point}'] = _epoch
         ws[f'{self.cell_PSNR}{cell_point}'] = _psnr
         ws[f'{self.cell_LOSS}{cell_point}'] = _loss
-        ws[f'{self.cell_VALID_LOSS}{cell_point}'] = _loss
+        ws[f'{self.cell_VALID_LOSS}{cell_point}'] = _val_loss
 
         wb.save(f'{self.excel_file_path}/{self.target_excel}')
     
