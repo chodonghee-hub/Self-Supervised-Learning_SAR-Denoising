@@ -1,4 +1,4 @@
-from util import show, plot_images, plot_tensors
+from util import select_email_provider, send_email_to, show, plot_images, plot_tensors
 from skimage.morphology import disk
 from skimage.filters import gaussian, median
 from skimage.util import random_noise
@@ -18,6 +18,7 @@ import os
 import openpyxl
 import shutil
 import time 
+import smtplib
 
 class SSupervised(object) : 
         
@@ -45,6 +46,12 @@ class SSupervised(object) :
         self.learning_rate = params.lr
         self.epoch = params.epoch
 
+        self.my_address, self.my_password, self.recv_address = select_email_provider()
+        if self.my_address != '' : 
+            self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+            if(self.SMTP.login(self.my_address, self.my_password)) == 235 : 
+                print(f'( OK ) Authentication Success : {self.my_address}')
+
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
@@ -61,7 +68,8 @@ class SSupervised(object) :
         # =============================================
         self.noisy_image = random_noise(self.img_resize, mode = params.noise_mode, var=3)        
         # self.noisy_image = random_noise(self.img_resize, params = 'gaussian', var=3)        
-        self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])
+        # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
+        self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
 
 
         # =============================================
@@ -121,14 +129,15 @@ class SSupervised(object) :
                 idx_loss = round(loss.item(), 5)
                 idx_val_loss = round(val_loss.item(), 5)
                 
-
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
                     denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                    best_psnr = psnr(denoised, self.noisy_image)
+                    # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
+                    best_psnr = psnr(denoised, self.img_resize)                    
                     self.best_images.append(denoised)
                     np.round(best_psnr, 2)
-                    print(" ( ! ) Update Model PSNR : ", np.round(best_psnr, 2))
+                    print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")
+                    self.__save_single_img__(i, denoised)
 
             # 100% 50% 25% 10% 1%
             if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
@@ -143,17 +152,54 @@ class SSupervised(object) :
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
                 self.__update_info__()
+            
+            time.sleep(1)
 
 
     # =============================================
-    #   Save 
+    #   Save Image - Sequence
     # =============================================
     def __save__(self) : 
+        r'''
+        if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
+            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
+        '''
+
+        assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'** No such directory : " images "'
+        plot_images(self.best_images)
+        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_images.png'
+        plt.savefig(savePath)
+
+        send_email_to(
+            _smtp = self.SMTP,
+            _my_address = self.my_address,
+            _my_password = self.my_password,
+            _subject = f"[ Finish Training ] {time.localtime().strftime('%Y-%m-%d %H:%M:%S')} → sequence_images.png",
+            _data = f"[ Finish Training ]",
+            _img_path = savePath,
+            _recv_address = self.recv_address
+            )
+
+
+    # =============================================
+    #   Save Image - Single
+    # =============================================
+    def __save_single_img__(self, _epoch, _img_target) : 
         if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
         
-        plot_images(self.best_images)
-        plt.savefig(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/plot_images.png')
+        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/EPOCH-{_epoch}.png'
+        plt.savefig(savePath)
+
+        send_email_to(
+            _smtp = self.SMTP,
+            _my_address = self.my_address,
+            _my_password = self.my_password,
+            _subject = f"[ Update Information ] {time.localtime().strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
+            _data = f"[ Update best cut information ]",
+            _img_path = savePath,
+            _recv_address = self.recv_address
+            )
 
 
     # =============================================
@@ -170,6 +216,9 @@ class SSupervised(object) :
             os.mkdir(f'{_path}/results/{self.dir_title_by_date}')
         
 
+    # =============================================
+    #   CSV Update Information  
+    # =============================================
     def __update_info__(self) : 
         print(f" {'○ Sheet Title'.ljust(23,' ')}", end = '')
         for key, val in self.cell_update_dict.items() : 
@@ -210,6 +259,18 @@ class SSupervised(object) :
     #   Main
     # =============================================
     def __start__(self) :
+        r'''
+        try : 
+            self.__set_default_dirs__()
+            self.__train__()
+            self.__save__()
+            self.SMTP.quit()
+
+        except Exception as e : 
+            print(f"** Error message : {e}")
+            self.SMTP.quit()
+        '''
         self.__set_default_dirs__()
         self.__train__()
         self.__save__()
+        self.SMTP.quit()

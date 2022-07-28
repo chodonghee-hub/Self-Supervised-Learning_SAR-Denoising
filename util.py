@@ -1,9 +1,15 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import smtplib
+import imghdr
+import time
+
 from numpy import clip, exp
 from scipy.signal import convolve2d
-import matplotlib.pyplot as plt
+from email.message import EmailMessage
+
 
 def expand(x, r):
     return np.repeat(np.repeat(x, r, axis = 0), r, axis = 1)
@@ -383,7 +389,7 @@ def get_args():
                         required=True)
     args = parser.parse_args()
 
-
+r'''
 def clear_line():
     """Clears line from any characters."""
 
@@ -400,11 +406,87 @@ def progress_bar(point):
     clear_line()
     print('\rTrain point {}/{} [{}{}] '.format(point, dest, '=' *  (bar_size - space_loc) + '>', ' ' * space_loc, end=''))
     
-
 def show_on_report(batch_idx, num_batches, loss, elapsed):
     """Formats training stats."""
 
     clear_line()
     dec = int(np.ceil(np.log10(num_batches)))
     print('Batch {:>{dec}d} / {:d} | Avg loss: {:>1.5f} | Avg train time / batch: {:d} ms'.format(batch_idx + 1, num_batches, loss, int(elapsed), dec=dec))
+'''
 
+def select_email_provider() : 
+    message = f"{' GMAIL OPTIONS '.center(60, '=')}\n{'You can send or receive training data by your email address'.center(60, ' ')}"
+    print(message)
+    SELECT = True
+    my_address, my_password, recv_address = '', '', ''
+
+    while SELECT : 
+        flag = input('● Set your email ? [ y / skip ] : ')
+
+        if flag in ['y', 'skip'] : 
+            if flag == 'y' : 
+                my_address, my_password, recv_address = set_email_info()
+                SELECT = False
+            else : 
+                SELECT = False
+        else : 
+            print('( ! ) choose [ y / skip ]\n')
+        time.sleep(1)
+    print('-'.center(60, '-'), '\n\n')
+    return my_address, my_password, recv_address
+
+
+def set_email_info() : 
+    SELECT_MINE = True 
+    SELECT_RECV = True 
+    recv_address = []
+    while SELECT_RECV : 
+        while SELECT_MINE : 
+            my_address = input('\n○ MY GMAIL ADDRESS : '.ljust(20, ' '))
+            my_password = input('○ MY GMAIL PASSWORD : '.ljust(20, ' '))
+            print(f"\n( V ) my email : {my_address}\n( V ) my password : {my_password}")
+            check_info = input("\n◎ save this email ? [ save / PRESS ANY KEY ] : ")
+            if check_info == 'save' : 
+                SELECT_MINE = False
+
+        while SELECT_RECV : 
+            check_info = input('\n● Do you want send to other people? [ y / skip ] : ')
+            if check_info in ['y', 'skip'] : 
+                if check_info == 'y' : 
+                    while SELECT_RECV : 
+                        recv_address.append(input('\n** RECV ADDRESS : '))
+                        print("\n[ RECV ADDRESS LIST ] ")
+                        for n, recv_target in enumerate(recv_address) : 
+                            print(f'* ( {n+1} )\t{recv_target}')
+                        if input('\n◎ Add more recv address ? [ y / PRESS ANY KEY ] : ') != 'y' : 
+                            SELECT_RECV = False
+                else : 
+                    SELECT_RECV = False
+            else : 
+                print('( ! ) choose [ y / skip ]\n')
+        time.sleep(1)
+
+    return my_address, my_password, recv_address if recv_address != [] else None
+    
+
+def send_email_to(_smtp, _my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
+    r'''
+    SMTP_SERVER = "smtp.gmail.com"
+    SMTP_PORT = 465
+    '''
+
+    message = EmailMessage()
+    message.set_content(_data)
+
+    message['Subject'] = _subject
+    message['From'] = _my_address
+    message['To'] = _my_address if _recv_address == None else _recv_address
+    
+    if _img_path != None : 
+        with open(_img_path) as image : 
+            image_file = image.read()
+
+        image_type = imghdr.what('codelion', image_file)
+        message.add_attachment(image_file, maintype = 'image', subtype = image_type)
+    
+    _smtp.send(message)
