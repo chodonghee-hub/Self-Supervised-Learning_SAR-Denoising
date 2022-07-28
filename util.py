@@ -9,6 +9,7 @@ import time
 from numpy import clip, exp
 from scipy.signal import convolve2d
 from email.message import EmailMessage
+from email.mime.text import MIMEText
 
 
 def expand(x, r):
@@ -469,24 +470,26 @@ def set_email_info() :
     return my_address, my_password, recv_address if recv_address != [] else None
     
 
-def send_email_to(_smtp, _my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
-    r'''
+def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
     SMTP_SERVER = "smtp.gmail.com"
     SMTP_PORT = 465
-    '''
 
     message = EmailMessage()
-    message.set_content(_data)
+    # message.set_content(_data)
+    message = MIMEText(_data)
 
-    message['Subject'] = _subject
-    message['From'] = _my_address
-    message['To'] = _my_address if _recv_address == None else _recv_address
+    message["Subject"] = _subject
+    message["From"] = _my_address
+    message["To"] = _my_address if _recv_address == None else _recv_address
     
     if _img_path != None : 
-        with open(_img_path) as image : 
+        with open(_img_path, "rb") as image : 
             image_file = image.read()
 
         image_type = imghdr.what('codelion', image_file)
         message.add_attachment(image_file, maintype = 'image', subtype = image_type)
     
-    _smtp.send(message)
+    smtp = smtplib.SMTP_SSL(SMTP_SERVER,SMTP_PORT)
+    smtp.login(_my_address,_my_password)
+    smtp.send(message)
+    smtp.quit()

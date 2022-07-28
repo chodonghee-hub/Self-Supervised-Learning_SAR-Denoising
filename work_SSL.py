@@ -47,11 +47,13 @@ class SSupervised(object) :
         self.epoch = params.epoch
 
         self.my_address, self.my_password, self.recv_address = select_email_provider()
+        r'''
         if self.my_address != '' : 
             self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-            if(self.SMTP.login(self.my_address, self.my_password)) == 235 : 
-                print(f'( OK ) Authentication Success : {self.my_address}')
-
+            login_status, _ = self.SMTP.login(self.my_address, self.my_password)
+            if login_status == 235 : 
+                print(f'( V ) Authentication Success : {self.my_address}\n')
+        '''
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
@@ -97,7 +99,7 @@ class SSupervised(object) :
         self.val_losses = []
         self.best_images = []
         self.best_val_loss = 1
-        best_psnr = 0 
+        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
         loss_function = MSELoss()
         optimizer = Adam(self.model.parameters(), lr=self.learning_rate)
 
@@ -115,7 +117,7 @@ class SSupervised(object) :
             loss.backward()
             optimizer.step()
 
-            if i % 10 == 0 :
+            if i % 10 == 0 and i > 0:
                 self.losses.append(loss.item())
                 self.model.eval()
                 
@@ -170,15 +172,19 @@ class SSupervised(object) :
         savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_images.png'
         plt.savefig(savePath)
 
-        send_email_to(
-            _smtp = self.SMTP,
-            _my_address = self.my_address,
-            _my_password = self.my_password,
-            _subject = f"[ Finish Training ] {time.localtime().strftime('%Y-%m-%d %H:%M:%S')} → sequence_images.png",
-            _data = f"[ Finish Training ]",
-            _img_path = savePath,
-            _recv_address = self.recv_address
-            )
+        idx_subject = str(f"[ Finish Training ] → sequence_images.png").encode('utf-8')
+        idx_data = f"[ Finish Training ]"
+        if self.my_address != '' : 
+            send_email_to(
+                # _smtp = self.SMTP,
+                _my_address = self.my_address,
+                _my_password = self.my_password,
+                # _subject = f"[ Finish Training ] {time.strftime('%Y-%m-%d %H:%M:%S')} → sequence_images.png",
+                _subject = idx_subject,
+                _data = idx_data,
+                _img_path = savePath,
+                _recv_address = self.recv_address
+                )
 
 
     # =============================================
@@ -191,15 +197,19 @@ class SSupervised(object) :
         savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/EPOCH-{_epoch}.png'
         plt.savefig(savePath)
 
-        send_email_to(
-            _smtp = self.SMTP,
-            _my_address = self.my_address,
-            _my_password = self.my_password,
-            _subject = f"[ Update Information ] {time.localtime().strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
-            _data = f"[ Update best cut information ]",
-            _img_path = savePath,
-            _recv_address = self.recv_address
-            )
+        if self.my_address != '' : 
+            idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
+            idx_data = f"[ Update best cut information ]"
+            send_email_to(
+                # _smtp = self.SMTP,
+                _my_address = self.my_address,
+                _my_password = self.my_password,
+                # _subject = f"[ Update Information ] {time.strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
+                _subject = idx_subject,
+                _data = idx_data,
+                _img_path = savePath,
+                _recv_address = self.recv_address
+                )
 
 
     # =============================================
