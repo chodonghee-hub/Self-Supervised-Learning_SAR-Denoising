@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import smtplib
 import imghdr
 import time
+import os 
 
 from numpy import clip, exp
 from scipy.signal import convolve2d
@@ -390,31 +391,6 @@ def get_args():
                         required=True)
     args = parser.parse_args()
 
-r'''
-def clear_line():
-    """Clears line from any characters."""
-
-    print('\r{}'.format(' ' * 80), end='\r')
-
-def progress_bar(point):
-    """Neat progress bar to track training."""
-
-    bar_size = 10
-    # progress = (batch_idx % report_interval) / report_interval
-    # fill = int(progress * bar_size) + 1
-    dest = (point//10)*10 + 10 
-    space_loc = dest - point
-    clear_line()
-    print('\rTrain point {}/{} [{}{}] '.format(point, dest, '=' *  (bar_size - space_loc) + '>', ' ' * space_loc, end=''))
-    
-def show_on_report(batch_idx, num_batches, loss, elapsed):
-    """Formats training stats."""
-
-    clear_line()
-    dec = int(np.ceil(np.log10(num_batches)))
-    print('Batch {:>{dec}d} / {:d} | Avg loss: {:>1.5f} | Avg train time / batch: {:d} ms'.format(batch_idx + 1, num_batches, loss, int(elapsed), dec=dec))
-'''
-
 def select_email_provider() : 
     message = f"{' GMAIL OPTIONS '.center(60, '=')}\n{'You can send or receive training data by your email address'.center(60, ' ')}"
     print(message)
@@ -426,8 +402,16 @@ def select_email_provider() :
 
         if flag in ['y', 'skip'] : 
             if flag == 'y' : 
+                if 'master-info' in os.listdir('./') and 'email.txt' in os.listdir('./master-info') : 
+                    select_master_email = input('● Load master email [ y / PRESS ANY KEY ] : ')
+                    if select_master_email == 'y' : 
+                        recv_address, _ = set_recv_address()
+                        print('-'.center(60, '-'), '\n\n')
+                        return my_address, my_password, recv_address
+                        
                 my_address, my_password, recv_address = set_email_info()
                 SELECT = False
+
             else : 
                 SELECT = False
         else : 
@@ -447,9 +431,10 @@ def set_email_info() :
             my_password = input('○ MY GMAIL PASSWORD : '.ljust(20, ' '))
             print(f"\n( V ) my email : {my_address}\n( V ) my password : {my_password}")
             check_info = input("\n◎ save this email ? [ save / PRESS ANY KEY ] : ")
-            if check_info == 'save' : 
+            if check_info == 'save' :
+                save_master_email(my_address, my_password) 
                 SELECT_MINE = False
-
+        r'''
         while SELECT_RECV : 
             check_info = input('\n● Do you want send to other people? [ y / skip ] : ')
             if check_info in ['y', 'skip'] : 
@@ -465,10 +450,34 @@ def set_email_info() :
                     SELECT_RECV = False
             else : 
                 print('( ! ) choose [ y / skip ]\n')
+        '''
+        recv_address, SELECT_RECV = set_recv_address()
         time.sleep(1)
 
     return my_address, my_password, recv_address if recv_address != [] else None
-    
+
+
+def set_recv_address() : 
+    SELECT_RECV = True 
+    recv_address = [] 
+    while SELECT_RECV : 
+        check_info = input('\n● Do you want send to other people? [ y / skip ] : ')
+        if check_info in ['y', 'skip'] : 
+            if check_info == 'y' : 
+                while SELECT_RECV : 
+                    recv_address.append(input('\n** RECV ADDRESS : '))
+                    print("\n[ RECV ADDRESS LIST ] ")
+                    for n, recv_target in enumerate(recv_address) : 
+                        print(f'* ( {n+1} )\t{recv_target}')
+                    if input('\n◎ Add more recv address ? [ y / PRESS ANY KEY ] : ') != 'y' : 
+                        SELECT_RECV = False
+            else : 
+                SELECT_RECV = False
+        else : 
+            print('( ! ) choose [ y / skip ]\n')
+        time.sleep(0.1)
+
+    return recv_address if recv_address != [] else None, SELECT_RECV
 
 def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
     SMTP_SERVER = "smtp.gmail.com"
@@ -492,3 +501,21 @@ def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _r
     smtp.login(_my_address,_my_password)
     smtp.send_message(message)
     smtp.quit()
+
+
+def save_master_email(_email, _password) : 
+    if "master-info" not in os.listdir('./') : 
+        os.mkdir('./master-info')
+
+    f = open('./master-info/email.txt', 'w')
+    f.write(f'EMAIL:{_email}\n')
+    f.write(f'PASSWORD:{_password}\n')
+    print(f"( ! ) Master Email Saved at : {'./master-info/email.txt'}")
+    f.close()
+
+
+def load_master_email() : 
+    f = open('./master-info/email.txt', 'r')
+    lines = f.readlines() 
+    info = [line.split(':') for line in lines]
+    return info[0], info[1]

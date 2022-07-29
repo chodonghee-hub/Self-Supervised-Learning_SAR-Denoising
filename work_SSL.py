@@ -9,7 +9,7 @@ from models.dncnn import DnCNN
 from torch.nn import MSELoss
 from torch.optim import Adam
 from tqdm import tqdm
-# from PIL import Image
+from PIL import Image
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -97,9 +97,7 @@ class SSupervised(object) :
     #   Training
     # =============================================
     def __train__(self) : 
-        self.losses = []
-        self.val_losses = []
-        self.best_images = []
+        
         self.best_val_loss = 1
         best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
         loss_function = MSELoss()
@@ -141,7 +139,7 @@ class SSupervised(object) :
                     self.best_images.append(denoised)
                     np.round(best_psnr, 2)
                     print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")
-                    self.__save_single_img__(i, denoised)
+                    self.__save_single_img__(i, [denoised])
 
             # 100% 50% 25% 10% 1%
             if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
@@ -164,9 +162,7 @@ class SSupervised(object) :
     #   Training - Test
     # =============================================
     def work__train__(self) : 
-        self.losses = []
-        self.val_losses = []
-        self.best_images = []
+        
         self.best_val_loss = 1
         best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
         loss_function = MSELoss()
@@ -180,17 +176,19 @@ class SSupervised(object) :
 
         i = 0
         for _ in range(self.epoch//div_point):
-            self.model.train()
-            
-            net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
-            net_output = self.model(net_input)
-            
-            loss = loss_function(net_output*mask, self.noisy*mask)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
             
             for _ in tqdm(range(div_point), desc="Train Process") :
+
+                self.model.train()
+            
+                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
+                net_output = self.model(net_input)
+                
+                loss = loss_function(net_output*mask, self.noisy*mask)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                
                 if i % 10 == 0 and i > 0:
                     self.losses.append(loss.item())
                     self.model.eval()
@@ -215,7 +213,9 @@ class SSupervised(object) :
                         # print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")           # ...       0729 test - skip print for tqdm 
                         if np.round(best_psnr, 2) not in psnr_ls.keys() : 
                             psnr_ls[np.round(best_psnr, 2)] = i
-                        self.__save_single_img__(i, denoised)
+                        
+                        self.__save_single_img__(i, [self.best_images[::1]], best_psnr, idx_val_loss)    # .. save error, for send email 
+                        # self.__save__()
 
                 # 100% 50% 25% 10% 1%
                 if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
@@ -231,7 +231,8 @@ class SSupervised(object) :
                     print(f"{'○ Besat PSNR'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{psnr_ls.get(max(psnr_ls.keys()))}")
                     print('='.ljust(65, '='))
                     self.__update_info__()
-                
+                    
+
                 i += 1
                 time.sleep(0.05)
 
@@ -239,17 +240,17 @@ class SSupervised(object) :
     #   Save Image - Sequence
     # =============================================
     def __save__(self) : 
-        r'''
+        
         if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
-        '''
 
-        assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'** No such directory : " images "'
+        assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'\n\n** No such directory : " images "'
         plot_images(self.best_images)
         savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_images.png'
         plt.savefig(savePath)
+        # plt.savefig(savePath)
 
-        idx_subject = str(f"[ Finish Training ] → sequence_images.png").encode('utf-8')
+        idx_subject = f"[ Finish Training ] → sequence_images.png"
         idx_data = f"[ Finish Training ]"
         if self.my_address != '' : 
             send_email_to(
@@ -267,17 +268,21 @@ class SSupervised(object) :
     # =============================================
     #   Save Image - Single
     # =============================================
-    def __save_single_img__(self, _epoch, _img_target) : 
+    def __save_single_img__(self, _epoch, _img_target,  _psnr, _v_loss) : 
         if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
-        
+        r'''
+        plot_images(_img_target)
+        # plt.imshow(_img_target, cmap=plt.cm.gray)
         savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/EPOCH-{_epoch}.png'
         plt.savefig(savePath)
+        # Image.fromarray(_img_target).save(savePath)
+        '''
 
         if self.my_address != '' : 
             # idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
             idx_subject = f"[ Update Information ] → EPOCH-{_epoch}.png"
-            idx_data = f"[ Update best cut information ]"
+            idx_data = f"[ Update best cut information ] \n* PSNR : {_psnr} \n* VAL_LOSS : {_v_loss}"
             send_email_to(
                 # _smtp = self.SMTP,
                 _my_address = self.my_address,
@@ -285,7 +290,7 @@ class SSupervised(object) :
                 # _subject = f"[ Update Information ] {time.strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
                 _subject = idx_subject,
                 _data = idx_data,
-                _img_path = savePath,
+                # _img_path = savePath,
                 _recv_address = self.recv_address
                 )
 
