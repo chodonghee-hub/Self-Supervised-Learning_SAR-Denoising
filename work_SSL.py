@@ -161,6 +161,81 @@ class SSupervised(object) :
 
 
     # =============================================
+    #   Training - Test
+    # =============================================
+    def work__train__(self) : 
+        self.losses = []
+        self.val_losses = []
+        self.best_images = []
+        self.best_val_loss = 1
+        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
+        loss_function = MSELoss()
+        optimizer = Adam(self.model.parameters(), lr=self.learning_rate)
+
+        now = time.localtime() 
+        self.record_train_time = "%02d-%02d" % (now.tm_hour, now.tm_min)
+        
+        div_point = 100 
+        psnr_ls = dict() 
+
+        i = 0
+        for _ in range(self.epoch//div_point):
+            self.model.train()
+            
+            net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
+            net_output = self.model(net_input)
+            
+            loss = loss_function(net_output*mask, self.noisy*mask)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            for _ in tqdm(range(div_point), desc="Train Process") :
+                if i % 10 == 0 and i > 0:
+                    self.losses.append(loss.item())
+                    self.model.eval()
+                    
+                    net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
+                    net_output = self.model(net_input)
+                
+                    val_loss = loss_function(net_output*mask, self.noisy*mask)
+                    
+                    self.val_losses.append(val_loss.item())
+                    
+                    idx_loss = round(loss.item(), 5)
+                    idx_val_loss = round(val_loss.item(), 5)
+                    
+                    if val_loss < self.best_val_loss:
+                        self.best_val_loss = val_loss
+                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+                        # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
+                        best_psnr = psnr(denoised, self.img_resize)                    
+                        self.best_images.append(denoised)
+                        np.round(best_psnr, 2)
+                        # print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")           # ...       0729 test - skip print for tqdm 
+                        if np.round(best_psnr, 2) not in psnr_ls.keys() : 
+                            psnr_ls[np.round(best_psnr, 2)] = i
+                        self.__save_single_img__(i, denoised)
+
+                # 100% 50% 25% 10% 1%
+                if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
+                    for per in [1, 0.5, 0.25, 0.1, 0.01] : 
+                        if i%(self.epoch*per) == 0 : 
+                            self.__save_csv__(f'{int(per*100)}%', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+                            self.cell_update_dict[f'{int(per*100)}%'] += 1
+
+                # update information & check end of epoch 
+                if i % div_point == 0 and i > 0 : 
+                    print(f" ( {i}/{self.epoch} )", end = '')
+                    print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
+                    print(f"{'○ Besat PSNR'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{psnr_ls.get(max(psnr_ls.keys()))}")
+                    print('='.ljust(65, '='))
+                    self.__update_info__()
+                
+                i += 1
+                time.sleep(0.05)
+
+    # =============================================
     #   Save Image - Sequence
     # =============================================
     def __save__(self) : 
@@ -284,6 +359,5 @@ class SSupervised(object) :
             self.SMTP.quit()
         '''
         self.__set_default_dirs__()
-        self.__train__()
+        self.work__train__()
         self.__save__()
-        self.SMTP.quit()
