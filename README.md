@@ -44,3 +44,15 @@ python work_train.py
     --epoch 100 
     --lr 0.1
 ```
+
+### SMTP
+- ref : https://m.blog.naver.com/ijoos/221742035684
+
+SMTP는 Simple Mail Transfer Protocol 의 줄임말로서 이메일을 보내는데 있어서 업계표준 프로토콜이다. 
+
+SMTP의 간단한 예를 보면 Microsoft Outlook 등에서 메일 Client가 메시지를 email server로 보낼때 사용하는 프로토콜로 볼 수 있다. 
+
+
+### Gmail Sender 
+- ref : https://coding-kindergarten.tistory.com/204
+- 시작 전에 발신 이메일 보안 설정 필요
