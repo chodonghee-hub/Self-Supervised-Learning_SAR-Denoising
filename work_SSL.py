@@ -8,7 +8,8 @@ from mask import Masker
 from models.dncnn import DnCNN
 from torch.nn import MSELoss
 from torch.optim import Adam
-from PIL import Image
+from tqdm import tqdm
+# from PIL import Image
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +19,8 @@ import os
 import openpyxl
 import shutil
 import time 
-import smtplib
+# import smtplib
+
 
 class SSupervised(object) : 
         
@@ -198,7 +200,8 @@ class SSupervised(object) :
         plt.savefig(savePath)
 
         if self.my_address != '' : 
-            idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
+            # idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
+            idx_subject = f"[ Update Information ] → EPOCH-{_epoch}.png"
             idx_data = f"[ Update best cut information ]"
             send_email_to(
                 # _smtp = self.SMTP,

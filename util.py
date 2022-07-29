@@ -475,8 +475,7 @@ def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _r
     SMTP_PORT = 465
 
     message = EmailMessage()
-    # message.set_content(_data)
-    message = MIMEText(_data)
+    message.set_content(_data)
 
     message["Subject"] = _subject
     message["From"] = _my_address
@@ -491,5 +490,5 @@ def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _r
     
     smtp = smtplib.SMTP_SSL(SMTP_SERVER,SMTP_PORT)
     smtp.login(_my_address,_my_password)
-    smtp.send(message)
+    smtp.send_message(message)
     smtp.quit()
