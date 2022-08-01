@@ -33,7 +33,8 @@ class SSupervised(object) :
         self.ckpt_file_path = ''
         self.target_excel = ''
         self.first_cell_info = 10
-        self.sheet_info_list = ['100%', '50%', '25%', '10%', '1%']
+        # self.sheet_info_list = ['100%', '50%', '25%', '10%', '1%', '1stack']
+        self.sheet_info_list = ['10', '5', '1']
         self.cell_info_dict = dict()
         self.cell_update_dict = dict()
         self.csv_first_cell = 'C'
@@ -198,8 +199,7 @@ class SSupervised(object) :
         for _ in range(self.epoch//div_point):
             
             for _ in tqdm(range(div_point), desc="Train Process") :
-                i += 1
-
+                
                 self.model.train()
             
                 net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
@@ -268,22 +268,39 @@ class SSupervised(object) :
                     # self.__save__()
 
                 # 100% 50% 25% 10% 1%
-                if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
+                # if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
+                r'''        
+                if 0 in [i%int(div) for div in self.sheet_info_list] : 
                     for per in [1, 0.5, 0.25, 0.1, 0.01] : 
                         if i%(self.epoch*per) == 0 : 
                             self.__save_csv__(f'{int(per*100)}%', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
                             self.cell_update_dict[f'{int(per*100)}%'] += 1
+                '''
 
-                # update information & check end of epoch 
-                if i % div_point == 0 and i > 0 : 
-                    print(f"\n\t[ {i}/{self.epoch} ]", end = '')
-                    print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
-                    print('='.ljust(65, '='))
-                    # print(f"{'( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(self.psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{self.psnr_ls.get(max(self.psnr_ls.keys()))}")
-                    self.__update_info__()
+                if i%1 == 0 : 
+                    # 1 로 나눠질 경우 
+                    self.__save_csv__(f'1', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
 
-                
+                    if i%5 == 0 : 
+                        # 5로 나눠질 경우 
+                        self.__save_csv__(f'5', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+
+                        if i%10 == 0 : 
+                            # 10로 나눠질 경우 
+                            self.__save_csv__(f'10', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+
+                i += 1
                 time.sleep(0.05)
+
+            # update information & check end of epoch 
+            if i % div_point == 0 and i > 0 : 
+                print(f"\n\n● [ {i}/{self.epoch} ]", end = '')
+                print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
+                print('='.ljust(65, '='))
+                # print(f"{'( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(self.psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{self.psnr_ls.get(max(self.psnr_ls.keys()))}")
+                self.__update_info__()
+
+           
 
     # =============================================
     #   Save Image - Sequence
@@ -323,8 +340,12 @@ class SSupervised(object) :
         if self.record_train_time not in os.listdir(f'./results/{self.dir_title_by_date}/') : 
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}')
         '''
+        
+        r'''
         if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
             os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
+        '''
+        
         r'''
         plot_images(_img_target)
         # plt.imshow(_img_target, cmap=plt.cm.gray)
@@ -332,7 +353,8 @@ class SSupervised(object) :
         plt.savefig(savePath)
         # Image.fromarray(_img_target).save(savePath)
         '''
-
+        assert 'images' in os.listdir(f'{self.excel_file_path}')
+        
         if self.my_address != '' : 
             # idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
             idx_subject = f"[ Update Information ] → EPOCH-{_epoch}.png"
@@ -371,17 +393,19 @@ class SSupervised(object) :
             os.mkdir(f"{self.excel_file_path}")
             shutil.copy('./result_format.xlsx', f'{self.excel_file_path}/train_log.xlsx')
         
+        if 'images' not in os.listdir(f'{self.excel_file_path}') : 
+            os.mkdir(f'{self.excel_file_path}/images')
 
     # =============================================
     #   CSV Update Information  
     # =============================================
     def __update_info__(self) : 
-        print(f" {'○ Sheet Title'.ljust(23,' ')}", end = '')
-        print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(self.psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{self.psnr_ls.get(max(self.psnr_ls.keys()))}")
+        print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(15, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{self.psnr_ls.get(str(max(self.psnr_ls.keys())).rjust(5, ' '))}")
         print(f" ○ {'Saved Check point : '.ljust(20, ' ')}{self.ckpt_cnt_by_epoch}")        
         self.ckpt_cnt_by_epoch = 0 
+        print(f" {'○ Sheet Title'.ljust(23,' ')}", end = '')
         for key, val in self.cell_update_dict.items() : 
-            print(f"{key} ({val})".rjust(8,' '), end = '')
+            print(f"{key} ({val})".rjust(15,' '), end = '')
             self.cell_update_dict[key] = 0 
         print(f"\n ○ {'Save record at'.ljust(20, ' ')}{str(f'{self.target_excel}').rjust(40, ' ')}\n\n")
     
