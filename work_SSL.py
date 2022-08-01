@@ -210,36 +210,6 @@ class SSupervised(object) :
                 loss.backward()
                 optimizer.step()
                 
-                r'''            # ...       0801 test - check all the epoch 
-                if i % 10 == 0 and i > 0:
-                    self.losses.append(loss.item())
-                    self.model.eval()
-                    
-                    net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
-                    net_output = self.model(net_input)
-                
-                    val_loss = loss_function(net_output*mask, self.noisy*mask)
-                    
-                    self.val_losses.append(val_loss.item())
-                    
-                    idx_loss = round(loss.item(), 5)
-                    idx_val_loss = round(val_loss.item(), 5)
-                    
-                    if val_loss < self.best_val_loss:
-                        self.best_val_loss = val_loss
-                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                        # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
-                        best_psnr = psnr(denoised, self.img_resize)                    
-                        self.best_images.append(denoised)
-                        np.round(best_psnr, 2)
-                        # print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")           # ...       0729 test - skip print for tqdm 
-                        if np.round(best_psnr, 2) not in psnr_ls.keys() : 
-                            psnr_ls[np.round(best_psnr, 2)] = i
-                        
-                        self.__save_single_img__(i, [self.best_images[::1]], best_psnr, idx_val_loss)    # .. save error, for send email 
-                        # self.__save__()
-                '''
-
                 self.losses.append(loss.item())
                 self.model.eval()
                 
@@ -267,26 +237,13 @@ class SSupervised(object) :
                     self.__save_single_img__(i, [self.best_images[::1]], best_psnr, idx_val_loss)    # .. save error, for send email 
                     # self.__save__()
 
-                # 100% 50% 25% 10% 1%
-                # if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
-                r'''        
-                if 0 in [i%int(div) for div in self.sheet_info_list] : 
-                    for per in [1, 0.5, 0.25, 0.1, 0.01] : 
-                        if i%(self.epoch*per) == 0 : 
-                            self.__save_csv__(f'{int(per*100)}%', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
-                            self.cell_update_dict[f'{int(per*100)}%'] += 1
-                '''
-
                 if i%1 == 0 : 
-                    # 1 로 나눠질 경우 
                     self.__save_csv__(f'1', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
 
                     if i%5 == 0 : 
-                        # 5로 나눠질 경우 
                         self.__save_csv__(f'5', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
 
                         if i%10 == 0 : 
-                            # 10로 나눠질 경우 
                             self.__save_csv__(f'10', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
 
                 i += 1
@@ -294,7 +251,7 @@ class SSupervised(object) :
 
             # update information & check end of epoch 
             if i % div_point == 0 and i > 0 : 
-                print(f"\n\n● [ {i}/{self.epoch} ]", end = '')
+                print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
                 # print(f"{'( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(self.psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{self.psnr_ls.get(max(self.psnr_ls.keys()))}")
@@ -306,11 +263,6 @@ class SSupervised(object) :
     #   Save Image - Sequence
     # =============================================
     def __save__(self) : 
-        r'''        # ...   0801 Assertion Check 
-        if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
-            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
-        '''
-
         assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'\n\n** No such directory : " images "'
         plot_images(self.best_images)
         savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_images.png'
@@ -336,23 +288,6 @@ class SSupervised(object) :
     #   Save Image - Single
     # =============================================
     def __save_single_img__(self, _epoch, _img_target,  _psnr, _v_loss) : 
-        r'''            # ...   0801 move to __set_default_dir__ 
-        if self.record_train_time not in os.listdir(f'./results/{self.dir_title_by_date}/') : 
-            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}')
-        '''
-        
-        r'''
-        if 'images' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') : 
-            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/images')
-        '''
-        
-        r'''
-        plot_images(_img_target)
-        # plt.imshow(_img_target, cmap=plt.cm.gray)
-        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/EPOCH-{_epoch}.png'
-        plt.savefig(savePath)
-        # Image.fromarray(_img_target).save(savePath)
-        '''
         assert 'images' in os.listdir(f'{self.excel_file_path}')
         
         if self.my_address != '' : 
@@ -396,16 +331,19 @@ class SSupervised(object) :
         if 'images' not in os.listdir(f'{self.excel_file_path}') : 
             os.mkdir(f'{self.excel_file_path}/images')
 
+        if 'ckpt' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') :
+            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/ckpt')
+
     # =============================================
     #   CSV Update Information  
     # =============================================
     def __update_info__(self) : 
-        print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(15, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{self.psnr_ls.get(str(max(self.psnr_ls.keys())).rjust(5, ' '))}")
-        print(f" ○ {'Saved Check point : '.ljust(20, ' ')}{self.ckpt_cnt_by_epoch}")        
+        print(f"{' ( Besat PSNR )'.ljust(21, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
+        print(f" ○ {'Saved Check point : '.ljust(31, ' ')}{str(self.ckpt_cnt_by_epoch).rjust(30, ' ')}")        
         self.ckpt_cnt_by_epoch = 0 
-        print(f" {'○ Sheet Title'.ljust(23,' ')}", end = '')
+        print(f" {'○ Sheet Title'.ljust(42,' ')}", end = '')
         for key, val in self.cell_update_dict.items() : 
-            print(f"{key} ({val})".rjust(15,' '), end = '')
+            print(f"{key} ({val})".rjust(7,' '), end = '')
             self.cell_update_dict[key] = 0 
         print(f"\n ○ {'Save record at'.ljust(20, ' ')}{str(f'{self.target_excel}').rjust(40, ' ')}\n\n")
     
@@ -414,17 +352,6 @@ class SSupervised(object) :
     #   Save CSV 
     # =============================================
     def __save_csv__(self, _sheet_flag, _epoch, _psnr, _loss, _val_loss) : 
-        r'''
-        assert 'result_format.xlsx' in os.listdir('./'), "\n\n** CSV result format not exists - check file name : result_format.xlsx"
-        if self.excel_file_path == '' : 
-            self.excel_file_path = f'./results/{self.dir_title_by_date}/{self.record_train_time}'
-
-        if self.record_train_time not in os.listdir(f'./results/{self.dir_title_by_date}/') : 
-            # os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}')
-            os.mkdir(f"{self.excel_file_path}")
-            shutil.copy('./result_format.xlsx', f'{self.excel_file_path}/train_log.xlsx')
-            print('** copy success !')
-        '''
 
         if self.target_excel == '' : 
             self.target_excel = f'{self.excel_file_path}/train_log.xlsx'
@@ -446,15 +373,9 @@ class SSupervised(object) :
     #   Save Model - Test 
     # =============================================
     def work_save_model(self, _epoch, _valid_loss):
-        # Create directory for model checkpoints, if nonexistent
-        if 'ckpt' not in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}') :
-            os.mkdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}/ckpt')
-        
         CKPT_PATH = f'./results/{self.dir_title_by_date}/{self.record_train_time}/ckpt'
 
-        # Save checkpoint dictionary
         fname = '{}/ssl-epoch{}-{:>1.5f}.pt'.format(CKPT_PATH, _epoch, _valid_loss)
-        # print('** Saving checkpoint to: {}'.format(fname))
         self.ckpt_cnt_by_epoch += 1
         torch.save(self.model.state_dict(), fname)
 

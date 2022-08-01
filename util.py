@@ -434,23 +434,7 @@ def set_email_info() :
             if check_info == 'save' :
                 save_master_email(my_address, my_password) 
                 SELECT_MINE = False
-        r'''
-        while SELECT_RECV : 
-            check_info = input('\n● Do you want send to other people? [ y / skip ] : ')
-            if check_info in ['y', 'skip'] : 
-                if check_info == 'y' : 
-                    while SELECT_RECV : 
-                        recv_address.append(input('\n** RECV ADDRESS : '))
-                        print("\n[ RECV ADDRESS LIST ] ")
-                        for n, recv_target in enumerate(recv_address) : 
-                            print(f'* ( {n+1} )\t{recv_target}')
-                        if input('\n◎ Add more recv address ? [ y / PRESS ANY KEY ] : ') != 'y' : 
-                            SELECT_RECV = False
-                else : 
-                    SELECT_RECV = False
-            else : 
-                print('( ! ) choose [ y / skip ]\n')
-        '''
+        
         recv_address, SELECT_RECV = set_recv_address()
         time.sleep(1)
 
