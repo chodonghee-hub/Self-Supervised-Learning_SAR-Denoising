@@ -463,9 +463,9 @@ def set_recv_address() :
 
     return recv_address if recv_address != [] else None, SELECT_RECV
 
-def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
-    SMTP_SERVER = "smtp.gmail.com"
-    SMTP_PORT = 465
+def send_email_to(_smtp, _my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
+    # SMTP_SERVER = "smtp.gmail.com"
+    # SMTP_PORT = 465
 
     message = EmailMessage()
     message.set_content(_data)
@@ -481,10 +481,9 @@ def send_email_to(_my_address, _my_password, _subject, _data, _img_path=None, _r
         image_type = imghdr.what('codelion', image_file)
         message.add_attachment(image_file, maintype = 'image', subtype = image_type)
     
-    smtp = smtplib.SMTP_SSL(SMTP_SERVER,SMTP_PORT)
-    smtp.login(_my_address,_my_password)
-    smtp.send_message(message)
-    smtp.quit()
+    # smtp = smtplib.SMTP_SSL(SMTP_SERVER,SMTP_PORT)
+    # smtp.login(_my_address,_my_password)
+    _smtp.send_message(message)
 
 
 def save_master_email(_email, _password) : 

@@ -33,7 +33,6 @@ class SSupervised(object) :
         self.ckpt_file_path = ''
         self.target_excel = ''
         self.first_cell_info = 10
-        # self.sheet_info_list = ['100%', '50%', '25%', '10%', '1%', '1stack']
         self.sheet_info_list = ['10', '5', '1']
         self.cell_info_dict = dict()
         self.cell_update_dict = dict()
@@ -93,7 +92,11 @@ class SSupervised(object) :
         # model = model.to(device)
         # noisy = noisy.to(device)
 
+    def __del__(self) : 
+        self.SMTP.quit()
+        print('\n\n** SMTP quit ! \n\n')
 
+    r'''
     # =============================================
     #   Training
     # =============================================
@@ -167,19 +170,18 @@ class SSupervised(object) :
                 self.__update_info__()
             
             time.sleep(1)
-
+    '''
 
     # =============================================
-    #   Training - Test
+    #   Training
     # =============================================
-    def work__train__(self) : 
+    def __train__(self) : 
         
         self.best_val_loss = 1
         best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
         self.ckpt_cnt_by_epoch = 0
         div_point = 100 
         self.psnr_ls = dict() 
-        save_target = [] 
         loss_function = MSELoss()
         optimizer = Adam(self.model.parameters(), 
                         lr=self.learning_rate
@@ -236,6 +238,7 @@ class SSupervised(object) :
                     self.__save_single_img__(i, [self.best_images[::1]], best_psnr, idx_val_loss)    # .. save error, for send email 
                     # self.__save__()
 
+                r'''
                 if i%1 == 0 : 
                     target_dic['1'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
                     self.cell_update_dict['1'] += 1
@@ -247,6 +250,14 @@ class SSupervised(object) :
                         if i%10 == 0 : 
                             target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
                             self.cell_update_dict['10'] += 1
+                '''
+
+                for div in target_dic.keys() : 
+                    if i%int(div) == 0 : 
+                        target_dic[div].append([f"{int(div)}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
+                        self.cell_update_dict[div] += 1
+                    else : 
+                        break
 
                 i += 1
                 time.sleep(0.05)
@@ -275,7 +286,7 @@ class SSupervised(object) :
         idx_data = f"[ Finish Training ]"
         if self.my_address != '' : 
             send_email_to(
-                # _smtp = self.SMTP,
+                _smtp = self.SMTP,
                 _my_address = self.my_address,
                 _my_password = self.my_password,
                 # _subject = f"[ Finish Training ] {time.strftime('%Y-%m-%d %H:%M:%S')} → sequence_images.png",
@@ -297,7 +308,7 @@ class SSupervised(object) :
             idx_subject = f"[ Update Information ] → EPOCH-{_epoch}.png"
             idx_data = f"[ Update best cut information ] \n* PSNR : {_psnr} \n* VAL_LOSS : {_v_loss}"
             send_email_to(
-                # _smtp = self.SMTP,
+                _smtp = self.SMTP,
                 _my_address = self.my_address,
                 _my_password = self.my_password,
                 # _subject = f"[ Update Information ] {time.strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
@@ -343,9 +354,9 @@ class SSupervised(object) :
         print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
         print(f" ○ {'Saved Check point : '.ljust(31, ' ')}{str(self.ckpt_cnt_by_epoch).rjust(30, ' ')}")        
         self.ckpt_cnt_by_epoch = 0 
-        print(f" {'○ Sheet Title'.ljust(42,' ')}", end = '')
+        print(f" {'○ Sheet Title'.ljust(36,' ')}", end = '')
         for key, val in self.cell_update_dict.items() : 
-            print(f"{key} ({val})".rjust(7,' '), end = '')
+            print(f"{key} ({val})".rjust(9,' '), end = '')
             self.cell_update_dict[key] = 0 
         print(f"\n ○ {'Save record at'.ljust(20, ' ')}{str(f'{self.target_excel}').rjust(40, ' ')}\n\n")
     
@@ -388,17 +399,6 @@ class SSupervised(object) :
     #   Main
     # =============================================
     def __start__(self) :
-        r'''
-        try : 
-            self.__set_default_dirs__()
-            self.__train__()
-            self.__save__()
-            self.SMTP.quit()
-
-        except Exception as e : 
-            print(f"** Error message : {e}")
-            self.SMTP.quit()
-        '''
         self.__set_default_dirs__()
-        self.work__train__()
+        self.__train__()
         self.__save__()

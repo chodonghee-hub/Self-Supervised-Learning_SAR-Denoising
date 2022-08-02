@@ -21,7 +21,7 @@ if __name__ == '__main__' :
     print(f'\n\n** image in : {os.path.join(params.img_path, params.img_file_name)}\n\n')
 
     # epoch check 
-    assert params.epoch%1000 == 0, f'{params.epoch} % 1000 == {params.epoch%1000}'
+    assert params.epoch%100 == 0, f'{params.epoch} % 1000 == {params.epoch%1000}'
     ssupervised = SSupervised(params)
     ssupervised.__start__()
 
