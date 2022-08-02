@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.functional as tvF
 import matplotlib.pyplot as plt
 import smtplib
 import imghdr
@@ -10,7 +11,8 @@ import os
 from numpy import clip, exp
 from scipy.signal import convolve2d
 from email.message import EmailMessage
-from email.mime.text import MIMEText
+# from email.mime.text import MIMEText
+from torch.utils.data import Dataset, DataLoader
 
 
 def expand(x, r):
@@ -463,7 +465,7 @@ def set_recv_address() :
 
     return recv_address if recv_address != [] else None, SELECT_RECV
 
-def send_email_to(_smtp, _my_address, _my_password, _subject, _data, _img_path=None, _recv_address=None) : 
+def send_email_to(_smtp, _my_address, _subject, _data, _img_path=None, _recv_address=None) : 
     # SMTP_SERVER = "smtp.gmail.com"
     # SMTP_PORT = 465
 
@@ -502,3 +504,98 @@ def load_master_email() :
     lines = f.readlines() 
     info = [line.split(':') for line in lines]
     return info[0], info[1]
+
+
+def create_montage(img_name, noise_type, save_path, source_t, denoised_t, clean_t, show):
+    """Creates montage for easy comparison."""
+
+    fig, ax = plt.subplots(1, 3, figsize=(9, 3))
+    fig.canvas.set_window_title(img_name.capitalize()[:-4])
+
+    # Bring tensors to CPU
+    source_t = source_t.cpu().narrow(0, 0, 3)
+    denoised_t = denoised_t.cpu()
+    clean_t = clean_t.cpu()
+    
+    source = tvF.to_pil_image(source_t)
+    denoised = tvF.to_pil_image(torch.clamp(denoised_t, 0, 1))
+    clean = tvF.to_pil_image(clean_t)
+
+    # Build image montage
+    psnr_vals = [psnr(source_t, clean_t), psnr(denoised_t, clean_t)]
+    titles = ['Input: {:.2f} dB'.format(psnr_vals[0]),
+              'Denoised: {:.2f} dB'.format(psnr_vals[1]),
+              'Ground truth']
+    zipped = zip(titles, [source, denoised, clean])
+    for j, (title, img) in enumerate(zipped):
+        ax[j].imshow(img)
+        ax[j].set_title(title)
+        ax[j].axis('off')
+
+    # Open pop up window, if requested
+    if show > 0:
+        plt.show()
+
+    # Save to files
+    fname = os.path.splitext(img_name)[0]
+    source.save(os.path.join(save_path, f'{fname}-{noise_type}-noisy.png'))
+    denoised.save(os.path.join(save_path, f'{fname}-{noise_type}-denoised.png'))
+    fig.savefig(os.path.join(save_path, f'{fname}-{noise_type}-montage.png'), bbox_inches='tight')
+
+
+# =========================== code from n2n demo - work for 'test' ==========================
+
+def load_dataset(root_dir, redux, params, shuffled=False, single=False):
+    """Loads dataset and returns corresponding data loader."""
+
+    # Create Torch dataset
+    noise = (params.noise_type, params.noise_param)
+
+    # Instantiate appropriate dataset class
+    if params.noise_type == 'mc':
+        # dataset = MonteCarloDataset(root_dir, redux, params.crop_size,
+        #    clean_targets=params.clean_targets)
+        pass
+    else:
+        dataset = NoisyDataset(root_dir, redux, params.crop_size,
+            clean_targets=params.clean_targets, noise_dist=noise, seed=params.seed)
+
+    # Use batch size of 1, if requested (e.g. test set)
+    if single:
+        return DataLoader(dataset, batch_size=1, shuffle=shuffled)
+    else:
+        return DataLoader(dataset, batch_size=params.batch_size, shuffle=shuffled)
+
+class AbstractDataset(Dataset):
+    """Abstract dataset class for Noise2Noise."""
+
+    def __init__(self, root_dir, redux=0, crop_size=128, clean_targets=False):
+        """Initializes abstract dataset."""
+
+        super(AbstractDataset, self).__init__()
+
+        self.imgs = []
+        self.root_dir = root_dir
+        self.redux = redux
+        self.crop_size = crop_size
+        self.clean_targets = clean_targets
+
+class NoisyDataset(AbstractDataset):
+    """Class for injecting random noise into dataset."""
+
+    def __init__(self, root_dir, redux, crop_size, clean_targets=False,
+        noise_dist=('gaussian', 50.), seed=None):
+        """Initializes noisy image dataset."""
+
+        super(NoisyDataset, self).__init__(root_dir, redux, crop_size, clean_targets)
+
+        self.imgs = os.listdir(root_dir)
+        if redux:
+            self.imgs = self.imgs[:redux]
+
+        # Noise parameters (max std for Gaussian, lambda for Poisson, nb of artifacts for text)
+        self.noise_type = noise_dist[0]
+        self.noise_param = noise_dist[1]
+        self.seed = seed
+        if self.seed:
+            np.random.seed(self.seed)

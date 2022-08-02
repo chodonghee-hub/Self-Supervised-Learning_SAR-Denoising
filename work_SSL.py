@@ -1,4 +1,4 @@
-from util import select_email_provider, send_email_to, show, plot_images, plot_tensors
+from util import select_email_provider, send_email_to, show, plot_images, plot_tensors, create_montage
 from skimage.morphology import disk
 from skimage.filters import gaussian, median
 from skimage.util import random_noise
@@ -27,6 +27,13 @@ class SSupervised(object) :
     def __init__(self, params) : 
         plt.rc('figure', figsize = (5,5))
         self.p = params
+        self.select_mode = params.selector
+
+        if params.selector == 'train' : 
+            self.__set_train__()
+        elif params.selector == 'test' : 
+            self.__set_test__()
+        r'''
         self.dir_title_by_date = ''
         self.record_train_time = "%02d-%02d" % (time.localtime().tm_hour, time.localtime().tm_min)
         self.excel_file_path = ''
@@ -83,19 +90,88 @@ class SSupervised(object) :
 
 
         # =============================================
-        #   Model 
+        #   Model - Select Train, Test by "Selector"
         # =============================================
-        self.model = DnCNN(1, num_of_layers = params.cnn_layer)
-        sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        if params.selector == 'train' :
+            self.model = DnCNN(1, num_of_layers = params.cnn_layer)
+            sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        
+        elif params.selector == 'test' : 
+            self.model = DnCNN()
+            self.model.load_state_dict(torch.load(self.p.load_ckpt))
+            self.eval()
+
+        '''
 
         # --------- GPU ---------
-        # model = model.to(device)
-        # noisy = noisy.to(device)
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(f'\n( DEVICE ) : {device}')
+        self.model = self.model.to(device)
+        self.noisy = self.noisy.to(device)
 
     def __del__(self) : 
         self.SMTP.quit()
         print('\n\n** SMTP quit ! \n\n')
 
+    def __set_train__(self) : 
+
+        self.dir_title_by_date = ''
+        self.record_train_time = "%02d-%02d" % (time.localtime().tm_hour, time.localtime().tm_min)
+        self.excel_file_path = ''
+        self.ckpt_file_path = ''
+        self.target_excel = ''
+        self.first_cell_info = 10
+        self.sheet_info_list = ['10', '5', '1']
+        self.cell_info_dict = dict()
+        self.cell_update_dict = dict()
+        self.csv_first_cell = 'C'
+        self.cell_EPOCH = self.csv_first_cell
+        self.cell_PSNR = chr(ord(self.csv_first_cell)+1)
+        self.cell_LOSS = chr(ord(self.csv_first_cell)+2)
+        self.cell_VALID_LOSS = chr(ord(self.csv_first_cell)+3)
+        self.losses = []
+        self.val_losses = []
+        self.best_images = []
+        self.best_val_loss = 1
+        self.learning_rate = self.p.lr
+        self.epoch = self.p.epoch
+
+        self.my_address, self.my_password, self.recv_address = select_email_provider()
+
+        if self.my_address != '' : 
+            self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+            login_status, _ = self.SMTP.login(self.my_address, self.my_password)
+            if login_status == 235 : 
+                print(f'( V ) Authentication Success : {self.my_address}\n')
+
+        for sheet in self.sheet_info_list : 
+            self.cell_info_dict[sheet] = self.first_cell_info - 1
+            self.cell_update_dict[sheet] = 0
+        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+         # =============================================
+        #   이미지 읽기, 그레이스케일 변환, 사이즈 조절 
+        # =============================================
+        self.img_gray = cv2.imread(os.path.join(self.p.img_path, self.p.img_file_name)) 
+        self.img_cv_gray = cv2.cvtColor(self.img_gray, cv2.COLOR_BGR2GRAY)
+        self.img_resize = resize(self.img_cv_gray, (self.p.resize,self.p.resize))
+        
+        # =============================================
+        #   노이즈 이미지 생성
+        # =============================================
+        self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode, var=1)        
+        # self.noisy_image = random_noise(self.img_resize, params = 'gaussian', var=3)        
+        # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
+        self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
+
+        # =============================================
+        #   Masking 
+        # =============================================
+        self.masker = Masker(width = 4, mode=self.p.mask_mode)
+
+    def __set_test__(self) : 
+        pass
     r'''
     # =============================================
     #   Training
@@ -254,7 +330,7 @@ class SSupervised(object) :
 
                 for div in target_dic.keys() : 
                     if i%int(div) == 0 : 
-                        target_dic[div].append([f"{int(div)}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
+                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
                         self.cell_update_dict[div] += 1
                     else : 
                         break
@@ -310,7 +386,6 @@ class SSupervised(object) :
             send_email_to(
                 _smtp = self.SMTP,
                 _my_address = self.my_address,
-                _my_password = self.my_password,
                 # _subject = f"[ Update Information ] {time.strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
                 _subject = idx_subject,
                 _data = idx_data,
@@ -396,9 +471,64 @@ class SSupervised(object) :
 
 
     # =============================================
+    #   Load Model - Test 
+    # =============================================
+    def work_load_model(self, ckpt_fname):
+        print('Loading checkpoint from: {}'.format(ckpt_fname))
+        if self.use_cuda:
+            self.model.load_state_dict(torch.load(ckpt_fname))
+        else:
+            self.model.load_state_dict(torch.load(ckpt_fname, map_location='cpu'))
+
+
+    def work_test(self, test_loader, show):
+        """Evaluates denoiser on test set."""
+
+        self.model.train(False)
+
+        source_imgs = []
+        denoised_imgs = []
+        clean_imgs = []
+
+        # Create directory for denoised images
+        denoised_dir = os.path.dirname(self.p.data)
+        save_path = os.path.join(denoised_dir, 'denoised')
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path)
+
+        for batch_idx, (source, target) in enumerate(test_loader):
+            # Only do first <show> images
+            if show == 0 or batch_idx >= show:
+                break
+
+            source_imgs.append(source)
+            clean_imgs.append(target)
+
+            if self.use_cuda:
+                source = source.cuda()
+
+            # Denoise
+            denoised_img = self.model(source).detach()
+            denoised_imgs.append(denoised_img)
+
+        # Squeeze tensors
+        source_imgs = [t.squeeze(0) for t in source_imgs]
+        denoised_imgs = [t.squeeze(0) for t in denoised_imgs]
+        clean_imgs = [t.squeeze(0) for t in clean_imgs]
+
+        # Create montage and save images
+        print('Saving images and montages to: {}'.format(save_path))
+        for i in range(len(source_imgs)):
+            img_name = test_loader.dataset.imgs[i]
+            create_montage(img_name, "SAR-Noise", save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], show)
+
+    # =============================================
     #   Main
     # =============================================
     def __start__(self) :
         self.__set_default_dirs__()
-        self.__train__()
-        self.__save__()
+        if self.select_mode == 'train' : 
+            self.__train__()
+            self.__save__()
+        elif self.select_mode == 'test' : 
+            self.work_test()
