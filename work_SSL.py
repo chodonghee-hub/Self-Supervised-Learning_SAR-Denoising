@@ -19,7 +19,7 @@ import os
 import openpyxl
 import shutil
 import time 
-# import smtplib
+import smtplib
 
 
 class SSupervised(object) : 
@@ -50,13 +50,13 @@ class SSupervised(object) :
         self.epoch = params.epoch
 
         self.my_address, self.my_password, self.recv_address = select_email_provider()
-        r'''
+
         if self.my_address != '' : 
             self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
             login_status, _ = self.SMTP.login(self.my_address, self.my_password)
             if login_status == 235 : 
                 print(f'( V ) Authentication Success : {self.my_address}\n')
-        '''
+
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
@@ -179,6 +179,7 @@ class SSupervised(object) :
         self.ckpt_cnt_by_epoch = 0
         div_point = 100 
         self.psnr_ls = dict() 
+        save_target = [] 
         loss_function = MSELoss()
         optimizer = Adam(self.model.parameters(), 
                         lr=self.learning_rate
@@ -191,13 +192,11 @@ class SSupervised(object) :
             if self.trainable:
                 loss_function = loss_function.cuda()
 
-        # now = time.localtime() 
-        # self.record_train_time = "%02d-%02d" % (now.tm_hour, now.tm_min)
         
-
         i = 0
         for _ in range(self.epoch//div_point):
-            
+            target_dic = {'1': [], '5': [], '10': []}
+
             for _ in tqdm(range(div_point), desc="Train Process") :
                 
                 self.model.train()
@@ -238,23 +237,26 @@ class SSupervised(object) :
                     # self.__save__()
 
                 if i%1 == 0 : 
-                    self.__save_csv__(f'1', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+                    target_dic['1'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
+                    self.cell_update_dict['1'] += 1
 
                     if i%5 == 0 : 
-                        self.__save_csv__(f'5', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+                        target_dic['5'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
+                        self.cell_update_dict['5'] += 1
 
                         if i%10 == 0 : 
-                            self.__save_csv__(f'10', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
+                            target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
+                            self.cell_update_dict['10'] += 1
 
                 i += 1
                 time.sleep(0.05)
 
             # update information & check end of epoch 
             if i % div_point == 0 and i > 0 : 
+                self.__save_csv__(target_dic)
                 print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
-                # print(f"{'( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.ljust(5, ' ')}{str(max(self.psnr_ls.keys())).ljust(15, ' ')}{'EPOCH : '.ljust(5, ' ')}{self.psnr_ls.get(max(self.psnr_ls.keys()))}")
                 self.__update_info__()
 
            
@@ -338,7 +340,7 @@ class SSupervised(object) :
     #   CSV Update Information  
     # =============================================
     def __update_info__(self) : 
-        print(f"{' ( Besat PSNR )'.ljust(21, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
+        print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
         print(f" ○ {'Saved Check point : '.ljust(31, ' ')}{str(self.ckpt_cnt_by_epoch).rjust(30, ' ')}")        
         self.ckpt_cnt_by_epoch = 0 
         print(f" {'○ Sheet Title'.ljust(42,' ')}", end = '')
@@ -349,25 +351,27 @@ class SSupervised(object) :
     
 
     # =============================================
-    #   Save CSV 
+    #   Save CSV
     # =============================================
-    def __save_csv__(self, _sheet_flag, _epoch, _psnr, _loss, _val_loss) : 
-
+    def __save_csv__(self, _save_target) : 
         if self.target_excel == '' : 
             self.target_excel = f'{self.excel_file_path}/train_log.xlsx'
-        wb = openpyxl.load_workbook(f'{self.target_excel}')
 
-        self.cell_info_dict[_sheet_flag] += 1
-        cell_point = self.cell_info_dict[_sheet_flag]
-        
-        ws = wb[_sheet_flag]
-        ws[f'{self.cell_EPOCH}{cell_point}'] = _epoch
-        ws[f'{self.cell_PSNR}{cell_point}'] = _psnr
-        ws[f'{self.cell_LOSS}{cell_point}'] = _loss
-        ws[f'{self.cell_VALID_LOSS}{cell_point}'] = _val_loss
+        for _sheet_flag in _save_target.keys() : 
+            wb = openpyxl.load_workbook(f'{self.target_excel}')
+            for [_epoch, _psnr, _loss, _val_loss] in _save_target[_sheet_flag]: 
 
-        wb.save(f'{self.target_excel}')
-    
+                self.cell_info_dict[_sheet_flag] += 1
+                cell_point = self.cell_info_dict[_sheet_flag]
+                
+                ws = wb[_sheet_flag]
+                ws[f'{self.cell_EPOCH}{cell_point}'] = _epoch
+                ws[f'{self.cell_PSNR}{cell_point}'] = _psnr
+                ws[f'{self.cell_LOSS}{cell_point}'] = _loss
+                ws[f'{self.cell_VALID_LOSS}{cell_point}'] = _val_loss
+
+            wb.save(f'{self.target_excel}')
+
 
     # =============================================
     #   Save Model - Test 
