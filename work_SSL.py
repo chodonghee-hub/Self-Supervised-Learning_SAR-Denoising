@@ -243,6 +243,7 @@ class SSupervised(object) :
                     
                     # self.__save_single_img__(i, [self.best_images[-1]], best_psnr, idx_val_loss)    # .. save error, for send email 
                     # self.__save__()
+                    self.work_save_model(i)       # ... save ckpt - test 
 
                 r'''
                 if i%1 == 0 : 
@@ -304,7 +305,7 @@ class SSupervised(object) :
                 _recv_address = self.recv_address
                 )
         
-        self.work_save_model(_epoch)       # ... save ckpt - test 
+        # self.work_save_model(_epoch)       # ... save ckpt - test 
 
     r'''
     # =============================================
@@ -414,60 +415,35 @@ class SSupervised(object) :
     # =============================================
     def work_load_model(self, ckpt_fname):
         print('Loading checkpoint from: {}'.format(ckpt_fname))
+        r'''
         if torch.cuda.is_available():
             self.model.load_state_dict(torch.load(ckpt_fname))
         else:
             self.model.load_state_dict(torch.load(ckpt_fname, map_location='cpu'))
+        '''
+        self.model.load_state_dict(torch.load(ckpt_fname))
+        self.model.eval()
 
+        self.work_test()
 
-    def work_test(self, test_loader, show):
+    def work_test(self):
         """Evaluates denoiser on test set."""
 
         self.model.train(False)
 
-        source_imgs = []
-        denoised_imgs = []
-        clean_imgs = []
+        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+        self.best_images.append(denoised)
+        self.__save__(1)
 
-        # Create directory for denoised images
-        denoised_dir = os.path.dirname(self.p.data)
-        save_path = os.path.join(denoised_dir, 'denoised')
-        if not os.path.isdir(save_path):
-            os.mkdir(save_path)
-
-        for batch_idx, (source, target) in enumerate(test_loader):
-            # Only do first <show> images
-            if show == 0 or batch_idx >= show:
-                break
-
-            source_imgs.append(source)
-            clean_imgs.append(target)
-
-            if self.use_cuda:
-                source = source.cuda()
-
-            # Denoise
-            denoised_img = self.model(source).detach()
-            denoised_imgs.append(denoised_img)
-
-        # Squeeze tensors
-        source_imgs = [t.squeeze(0) for t in source_imgs]
-        denoised_imgs = [t.squeeze(0) for t in denoised_imgs]
-        clean_imgs = [t.squeeze(0) for t in clean_imgs]
-
-        # Create montage and save images
-        print('Saving images and montages to: {}'.format(save_path))
-        for i in range(len(source_imgs)):
-            img_name = test_loader.dataset.imgs[i]
-            create_montage(img_name, "SAR-Noise", save_path, source_imgs[i], denoised_imgs[i], clean_imgs[i], show)
+        
 
     # =============================================
     #   Main
     # =============================================
-    def __start__(self) :
+    def __start__(self, save_file = None) :
         self.__set_default_dirs__()
         if self.select_mode == 'train' : 
             self.__train__()
             # self.__save__()
         elif self.select_mode == 'test' : 
-            self.work_test()
+            self.work_test(save_file)
