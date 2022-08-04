@@ -28,6 +28,7 @@ class SSupervised(object) :
         plt.rc('figure', figsize = (5,5))
         self.p = params
         self.select_mode = params.selector
+        self.SMTP = ''
 
         if params.selector == 'train' : 
             self.__set_train__()
@@ -104,13 +105,14 @@ class SSupervised(object) :
         '''
 
         # --------- GPU ---------
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print(f'\n( DEVICE ) : {device}')
-        self.model = self.model.to(device)
-        self.noisy = self.noisy.to(device)
+        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # print(f'\n( DEVICE ) : {device}')
+        # self.model = self.model.to(device)
+        # self.noisy = self.noisy.to(device)
 
     def __del__(self) : 
-        self.SMTP.quit()
+        if self.SMTP != '' : 
+            self.SMTP.quit()
         print('\n\n** SMTP quit ! \n\n')
 
     def __set_train__(self) : 
@@ -133,6 +135,7 @@ class SSupervised(object) :
         self.val_losses = []
         self.best_images = []
         self.best_val_loss = 1
+        self.save_img_param = 0                                 # .. for save best image parameter
         self.learning_rate = self.p.lr
         self.epoch = self.p.epoch
 
@@ -168,86 +171,12 @@ class SSupervised(object) :
         # =============================================
         #   Masking 
         # =============================================
-        self.masker = Masker(width = 4, mode=self.p.mask_mode)
+        self.masker = Masker(width = 1, mode=self.p.mask_mode)
 
     def __set_test__(self) : 
+        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
         pass
-    r'''
-    # =============================================
-    #   Training
-    # =============================================
-    def __train__(self) : 
-        
-        self.best_val_loss = 1
-        loss_function = MSELoss()
-        optimizer = Adam(self.model.parameters(), 
-                        lr=self.learning_rate
-                        )
-
-        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
-
-         # CUDA support
-        self.use_cuda = torch.cuda.is_available()
-        if self.use_cuda:
-            self.model = self.model.cuda()
-            if self.trainable:
-                loss_function = loss_function.cuda()
-
-        now = time.localtime() 
-        self.record_train_time = "%02d-%02d" % (now.tm_hour, now.tm_min)
-        
-        for i in range(self.epoch):
-            self.model.train()
-            
-            net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
-            net_output = self.model(net_input)
-            
-            loss = loss_function(net_output*mask, self.noisy*mask)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            if i % 10 == 0 and i > 0:
-                self.losses.append(loss.item())
-                self.model.eval()
-                
-                net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
-                net_output = self.model(net_input)
-            
-                val_loss = loss_function(net_output*mask, self.noisy*mask)
-                
-                self.val_losses.append(val_loss.item())
-                
-                idx_loss = round(loss.item(), 5)
-                idx_val_loss = round(val_loss.item(), 5)
-                
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
-                    denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                    # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
-                    best_psnr = psnr(denoised, self.img_resize)                    
-                    self.best_images.append(denoised)
-                    np.round(best_psnr, 2)
-                    print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")
-                    self.__save_single_img__(i, [denoised])
-
-            # 100% 50% 25% 10% 1%
-            if 0 in [i%int(self.epoch*1), i%int(self.epoch*0.5), i%int(self.epoch*0.25), i%int(self.epoch*0.1), i%int(self.epoch*0.01)] : 
-                for per in [1, 0.5, 0.25, 0.1, 0.01] : 
-                    if i%(self.epoch*per) == 0 : 
-                        self.__save_csv__(f'{int(per*100)}%', f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss)
-                        self.cell_update_dict[f'{int(per*100)}%'] += 1
-
-            # update information & check end of epoch 
-            if i % 100 == 0 or i+1 == self.epoch : 
-                print(f" ( {i}/{self.epoch} )", end = '')
-                print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
-                print('='.ljust(65, '='))
-                self.__update_info__()
-            
-            time.sleep(1)
-    '''
-
+    
     # =============================================
     #   Training
     # =============================================
@@ -279,7 +208,8 @@ class SSupervised(object) :
                 
                 self.model.train()
             
-                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
+                # net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
+                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks))
                 net_output = self.model(net_input)
                 
                 loss = loss_function(net_output*mask, self.noisy*mask)
@@ -311,7 +241,7 @@ class SSupervised(object) :
                     if np.round(best_psnr, 2) not in self.psnr_ls.keys() : 
                         self.psnr_ls[np.round(best_psnr, 2)] = i
                     
-                    self.__save_single_img__(i, [self.best_images[::1]], best_psnr, idx_val_loss)    # .. save error, for send email 
+                    # self.__save_single_img__(i, [self.best_images[-1]], best_psnr, idx_val_loss)    # .. save error, for send email 
                     # self.__save__()
 
                 r'''
@@ -344,6 +274,7 @@ class SSupervised(object) :
                 print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
+                self.__save__(i)
                 self.__update_info__()
 
            
@@ -351,10 +282,11 @@ class SSupervised(object) :
     # =============================================
     #   Save Image - Sequence
     # =============================================
-    def __save__(self) : 
+    def __save__(self, _epoch) : 
         assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'\n\n** No such directory : " images "'
-        plot_images(self.best_images)
-        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_images.png'
+        plot_images(self.best_images[self.save_img_param:len(self.best_images)])
+        self.save_img_param = len(self.best_images)
+        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_{_epoch-100}-{_epoch}.png'
         plt.savefig(savePath)
         # plt.savefig(savePath)
 
@@ -372,12 +304,17 @@ class SSupervised(object) :
                 _recv_address = self.recv_address
                 )
 
-
+    r'''
     # =============================================
     #   Save Image - Single
     # =============================================
     def __save_single_img__(self, _epoch, _img_target,  _psnr, _v_loss) : 
         assert 'images' in os.listdir(f'{self.excel_file_path}')
+
+        # plt.imshow(_img_target)
+        plot_images(_img_target)
+        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/epoch-{_epoch}.png'
+        plt.savefig(savePath)
         
         if self.my_address != '' : 
             # idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
@@ -394,7 +331,7 @@ class SSupervised(object) :
                 )
         
         self.work_save_model(_epoch, _v_loss)       # ... save ckpt - test 
-
+    '''
 
     # =============================================
     #   Make defualt directorys 
@@ -475,7 +412,7 @@ class SSupervised(object) :
     # =============================================
     def work_load_model(self, ckpt_fname):
         print('Loading checkpoint from: {}'.format(ckpt_fname))
-        if self.use_cuda:
+        if torch.cuda.is_available():
             self.model.load_state_dict(torch.load(ckpt_fname))
         else:
             self.model.load_state_dict(torch.load(ckpt_fname, map_location='cpu'))
@@ -529,6 +466,6 @@ class SSupervised(object) :
         self.__set_default_dirs__()
         if self.select_mode == 'train' : 
             self.__train__()
-            self.__save__()
+            # self.__save__()
         elif self.select_mode == 'test' : 
             self.work_test()

@@ -28,6 +28,6 @@ if __name__ == '__main__' :
     ssupervised = SSupervised(params)
     ssupervised.work_load_model(params.load_ckpt)
     test_loader = load_dataset(os.path.join(params.img_path, params.img_file_name), 0, params, shuffled=False, single=True)
-    ssupervised.work_test(test_loader, 1)
+    ssupervised.work_test(test_loader)
 
     

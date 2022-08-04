@@ -8,6 +8,7 @@ class DnCNN(nn.Module):
         padding = 1
         features = 64
         layers = []
+        # layers.append(nn.Conv2d(in_channels=channels, out_channels=features, kernel_size=kernel_size, padding=padding, bias=False))
         layers.append(nn.Conv2d(in_channels=channels, out_channels=features, kernel_size=kernel_size, padding=padding, bias=False))
         layers.append(nn.ReLU(inplace=True))
         for _ in range(num_of_layers - 2):
