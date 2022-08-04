@@ -303,6 +303,8 @@ class SSupervised(object) :
                 _img_path = savePath,
                 _recv_address = self.recv_address
                 )
+        
+        self.work_save_model(_epoch)       # ... save ckpt - test 
 
     r'''
     # =============================================
@@ -399,10 +401,10 @@ class SSupervised(object) :
     # =============================================
     #   Save Model - Test 
     # =============================================
-    def work_save_model(self, _epoch, _valid_loss):
+    def work_save_model(self, _epoch):
         CKPT_PATH = f'./results/{self.dir_title_by_date}/{self.record_train_time}/ckpt'
 
-        fname = '{}/ssl-epoch{}-{:>1.5f}.pt'.format(CKPT_PATH, _epoch, _valid_loss)
+        fname = '{}/ssl-epoch{}.pt'.format(CKPT_PATH, _epoch)
         self.ckpt_cnt_by_epoch += 1
         torch.save(self.model.state_dict(), fname)
 
