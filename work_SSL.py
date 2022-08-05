@@ -34,126 +34,8 @@ class SSupervised(object) :
             self.__set_train__()
         elif params.selector == 'test' : 
             self.__set_test__()
-        r'''
-        self.dir_title_by_date = ''
-        self.record_train_time = "%02d-%02d" % (time.localtime().tm_hour, time.localtime().tm_min)
-        self.excel_file_path = ''
-        self.ckpt_file_path = ''
-        self.target_excel = ''
-        self.first_cell_info = 10
-        self.sheet_info_list = ['10', '5', '1']
-        self.cell_info_dict = dict()
-        self.cell_update_dict = dict()
-        self.csv_first_cell = 'C'
-        self.cell_EPOCH = self.csv_first_cell
-        self.cell_PSNR = chr(ord(self.csv_first_cell)+1)
-        self.cell_LOSS = chr(ord(self.csv_first_cell)+2)
-        self.cell_VALID_LOSS = chr(ord(self.csv_first_cell)+3)
-        self.losses = []
-        self.val_losses = []
-        self.best_images = []
-        self.best_val_loss = 1
-        self.learning_rate = params.lr
-        self.epoch = params.epoch
-
-        self.my_address, self.my_password, self.recv_address = select_email_provider()
-
-        if self.my_address != '' : 
-            self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-            login_status, _ = self.SMTP.login(self.my_address, self.my_password)
-            if login_status == 235 : 
-                print(f'( V ) Authentication Success : {self.my_address}\n')
-
-        for sheet in self.sheet_info_list : 
-            self.cell_info_dict[sheet] = self.first_cell_info - 1
-            self.cell_update_dict[sheet] = 0
-
+      
         # =============================================
-        #   이미지 읽기, 그레이스케일 변환, 사이즈 조절 
-        # =============================================
-        self.img_gray = cv2.imread(os.path.join(params.img_path, params.img_file_name)) 
-        self.img_cv_gray = cv2.cvtColor(self.img_gray, cv2.COLOR_BGR2GRAY)
-        self.img_resize = resize(self.img_cv_gray, (params.resize,params.resize))
-        
-        # =============================================
-        #   노이즈 이미지 생성
-        # =============================================
-        self.noisy_image = random_noise(self.img_resize, mode = params.noise_mode, var=1)        
-        # self.noisy_image = random_noise(self.img_resize, params = 'gaussian', var=3)        
-        # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
-        self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
-
-
-        # =============================================
-        #   Masking 
-        # =============================================
-        self.masker = Masker(width = 4, mode=params.mask_mode)
-
-
-        # =============================================
-        #   Model - Select Train, Test by "Selector"
-        # =============================================
-        if params.selector == 'train' :
-            self.model = DnCNN(1, num_of_layers = params.cnn_layer)
-            sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        
-        elif params.selector == 'test' : 
-            self.model = DnCNN()
-            self.model.load_state_dict(torch.load(self.p.load_ckpt))
-            self.eval()
-
-        '''
-
-        # --------- GPU ---------
-        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        # print(f'\n( DEVICE ) : {device}')
-        # self.model = self.model.to(device)
-        # self.noisy = self.noisy.to(device)
-
-    def __del__(self) : 
-        if self.SMTP != '' : 
-            self.SMTP.quit()
-        print('\n\n** SMTP quit ! \n\n')
-
-    def __set_train__(self) : 
-
-        self.dir_title_by_date = ''
-        self.record_train_time = "%02d-%02d" % (time.localtime().tm_hour, time.localtime().tm_min)
-        self.excel_file_path = ''
-        self.ckpt_file_path = ''
-        self.target_excel = ''
-        self.first_cell_info = 10
-        self.sheet_info_list = ['10', '5', '1']
-        self.cell_info_dict = dict()
-        self.cell_update_dict = dict()
-        self.csv_first_cell = 'C'
-        self.cell_EPOCH = self.csv_first_cell
-        self.cell_PSNR = chr(ord(self.csv_first_cell)+1)
-        self.cell_LOSS = chr(ord(self.csv_first_cell)+2)
-        self.cell_VALID_LOSS = chr(ord(self.csv_first_cell)+3)
-        self.losses = []
-        self.val_losses = []
-        self.best_images = []
-        self.best_val_loss = 1
-        self.save_img_param = 0                                 # .. for save best image parameter
-        self.learning_rate = self.p.lr
-        self.epoch = self.p.epoch
-
-        self.my_address, self.my_password, self.recv_address = select_email_provider()
-
-        if self.my_address != '' : 
-            self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-            login_status, _ = self.SMTP.login(self.my_address, self.my_password)
-            if login_status == 235 : 
-                print(f'( V ) Authentication Success : {self.my_address}\n')
-
-        for sheet in self.sheet_info_list : 
-            self.cell_info_dict[sheet] = self.first_cell_info - 1
-            self.cell_update_dict[sheet] = 0
-        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
-        sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-
-         # =============================================
         #   이미지 읽기, 그레이스케일 변환, 사이즈 조절 
         # =============================================
         self.img_gray = cv2.imread(os.path.join(self.p.img_path, self.p.img_file_name)) 
@@ -171,10 +53,63 @@ class SSupervised(object) :
         # =============================================
         #   Masking 
         # =============================================
-        self.masker = Masker(width = 1, mode=self.p.mask_mode)
+        self.masker = Masker(width = 10, mode=self.p.mask_mode)
+        
+        self.my_address, self.my_password, self.recv_address = select_email_provider()
+
+        if self.my_address != '' : 
+            self.SMTP = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+            login_status, _ = self.SMTP.login(self.my_address, self.my_password)
+            if login_status == 235 : 
+                print(f'( V ) Authentication Success : {self.my_address}\n')
+        
+        # --------- GPU ---------
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print(f'\n( DEVICE ) : {device}')
+        self.model = self.model.to(device)
+        self.noisy = self.noisy.to(device)
+
+    def __del__(self) : 
+        if self.SMTP != '' : 
+            self.SMTP.quit()
+        print('\n\n** SMTP quit ! \n\n')
+
+    def __set_train__(self) : 
+
+        self.dir_title_by_date = ''
+        self.record_train_time = "%02d-%02d" % (time.localtime().tm_hour, time.localtime().tm_min)
+        self.excel_file_path = ''
+        self.ckpt_file_path = ''
+        self.target_excel = ''
+        self.plt_image_title = ''
+        self.first_cell_info = 10
+        self.sheet_info_list = ['10', '5', '1']
+        self.cell_info_dict = dict()
+        self.cell_update_dict = dict()
+        self.csv_first_cell = 'C'
+        self.cell_EPOCH = self.csv_first_cell
+        self.cell_PSNR = chr(ord(self.csv_first_cell)+1)
+        self.cell_LOSS = chr(ord(self.csv_first_cell)+2)
+        self.cell_VALID_LOSS = chr(ord(self.csv_first_cell)+3)
+        self.losses = []
+        self.val_losses = []
+        self.best_images = []
+        self.best_val_loss = 1
+        self.save_img_param = 0                                 # .. for save best image parameter
+        self.learning_rate = self.p.lr
+        self.epoch = self.p.epoch
+
+
+        for sheet in self.sheet_info_list : 
+            self.cell_info_dict[sheet] = self.first_cell_info - 1
+            self.cell_update_dict[sheet] = 0
+        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
 
     def __set_test__(self) : 
         self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         pass
     
     # =============================================
@@ -237,27 +172,8 @@ class SSupervised(object) :
                     best_psnr = psnr(denoised, self.img_resize)                    
                     self.best_images.append(denoised)
                     np.round(best_psnr, 2)
-                    # print(f" ( ! ) Update Model PSNR : {np.round(best_psnr, 2)}\n")           # ...       0729 test - skip print for tqdm 
                     if np.round(best_psnr, 2) not in self.psnr_ls.keys() : 
                         self.psnr_ls[np.round(best_psnr, 2)] = i
-                    
-                    # self.__save_single_img__(i, [self.best_images[-1]], best_psnr, idx_val_loss)    # .. save error, for send email 
-                    # self.__save__()
-                    self.work_save_model(i)       # ... save ckpt - test 
-
-                r'''
-                if i%1 == 0 : 
-                    target_dic['1'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
-                    self.cell_update_dict['1'] += 1
-
-                    if i%5 == 0 : 
-                        target_dic['5'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
-                        self.cell_update_dict['5'] += 1
-
-                        if i%10 == 0 : 
-                            target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
-                            self.cell_update_dict['10'] += 1
-                '''
 
                 for div in target_dic.keys() : 
                     if i%int(div) == 0 : 
@@ -267,6 +183,7 @@ class SSupervised(object) :
                         break
 
                 i += 1
+                self.work_save_model(self.model, i)       # ... save ckpt - test 
                 time.sleep(0.05)
 
             # update information & check end of epoch 
@@ -285,56 +202,28 @@ class SSupervised(object) :
     # =============================================
     def __save__(self, _epoch) : 
         assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'\n\n** No such directory : " images "'
-        plot_images(self.best_images[self.save_img_param:len(self.best_images)])
-        self.save_img_param = len(self.best_images)
-        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_{_epoch-100}-{_epoch}.png'
-        plt.savefig(savePath)
-        # plt.savefig(savePath)
+        if len(self.best_images[self.save_img_param:len(self.best_images)]) > 1 : 
+            plot_images(self.best_images[self.save_img_param:len(self.best_images)])
+            self.save_img_param = len(self.best_images)
+            savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_{self.plt_image_title}-{_epoch}.png'
+            plt.savefig(savePath)
 
-        idx_subject = f"[ Finish Training ] → sequence_images.png"
-        idx_data = f"[ Finish Training ]"
-        if self.my_address != '' : 
-            send_email_to(
-                _smtp = self.SMTP,
-                _my_address = self.my_address,
-                _my_password = self.my_password,
-                # _subject = f"[ Finish Training ] {time.strftime('%Y-%m-%d %H:%M:%S')} → sequence_images.png",
-                _subject = idx_subject,
-                _data = idx_data,
-                _img_path = savePath,
-                _recv_address = self.recv_address
-                )
+            idx_subject = f"[ Training {self.plt_image_title}-{_epoch} ] → sequence_{self.plt_image_title}-{_epoch}.png"
+            idx_data = f"[ EPOCH : {self.plt_image_title}-{_epoch} ]"
+            if self.my_address != '' : 
+                send_email_to(
+                    _smtp = self.SMTP,
+                    _my_address = self.my_address,
+                    _subject = idx_subject,
+                    _data = idx_data,
+                    _img_path = savePath,
+                    _recv_address = self.recv_address
+                    )
+            
+            self.plt_image_title = _epoch
         
         # self.work_save_model(_epoch)       # ... save ckpt - test 
 
-    r'''
-    # =============================================
-    #   Save Image - Single
-    # =============================================
-    def __save_single_img__(self, _epoch, _img_target,  _psnr, _v_loss) : 
-        assert 'images' in os.listdir(f'{self.excel_file_path}')
-
-        # plt.imshow(_img_target)
-        plot_images(_img_target)
-        savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/epoch-{_epoch}.png'
-        plt.savefig(savePath)
-        
-        if self.my_address != '' : 
-            # idx_subject = str(f"[ Update Information ] → EPOCH-{_epoch}.png").encode('utf-8')
-            idx_subject = f"[ Update Information ] → EPOCH-{_epoch}.png"
-            idx_data = f"[ Update best cut information ] \n* PSNR : {_psnr} \n* VAL_LOSS : {_v_loss}"
-            send_email_to(
-                _smtp = self.SMTP,
-                _my_address = self.my_address,
-                # _subject = f"[ Update Information ] {time.strftime('%Y-%m-%d %H:%M:%S')} → EPOCH-{_epoch}.png",
-                _subject = idx_subject,
-                _data = idx_data,
-                # _img_path = savePath,
-                _recv_address = self.recv_address
-                )
-        
-        self.work_save_model(_epoch, _v_loss)       # ... save ckpt - test 
-    '''
 
     # =============================================
     #   Make defualt directorys 
@@ -402,12 +291,13 @@ class SSupervised(object) :
     # =============================================
     #   Save Model - Test 
     # =============================================
-    def work_save_model(self, _epoch):
+    def work_save_model(self, _model, _epoch):
         CKPT_PATH = f'./results/{self.dir_title_by_date}/{self.record_train_time}/ckpt'
 
         fname = '{}/ssl-epoch{}.pt'.format(CKPT_PATH, _epoch)
         self.ckpt_cnt_by_epoch += 1
-        torch.save(self.model.state_dict(), fname)
+        # torch.save(self.model.state_dict(), fname)
+        torch.save(_model.state_dict(), fname)
 
 
     # =============================================
@@ -421,7 +311,8 @@ class SSupervised(object) :
         else:
             self.model.load_state_dict(torch.load(ckpt_fname, map_location='cpu'))
         '''
-        self.model.load_state_dict(torch.load(ckpt_fname))
+        self.model.load_state_dict(torch.load(ckpt_fname, map_location='cpu'), strict=False)
+        # self.model = torch.load(ckpt_fname)
         self.model.eval()
 
         self.work_test()
@@ -429,7 +320,7 @@ class SSupervised(object) :
     def work_test(self):
         """Evaluates denoiser on test set."""
 
-        self.model.train(False)
+        # self.model.train(False)
 
         denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
         self.best_images.append(denoised)
