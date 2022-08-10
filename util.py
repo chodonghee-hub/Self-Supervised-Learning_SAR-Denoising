@@ -96,7 +96,7 @@ def plot_grid(images, height, width, **kwargs):
                 ax[j].imshow(image_grid[i, j], **kwargs)
                 ax[j].get_xaxis().set_ticks([])
                 ax[j].get_yaxis().set_ticks([])
-    fig
+    
 
 def show(image, **kwargs):
     import matplotlib.pyplot as plt
