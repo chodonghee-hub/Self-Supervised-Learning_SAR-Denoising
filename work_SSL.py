@@ -9,6 +9,7 @@ from models.dncnn import DnCNN
 from torch.nn import MSELoss
 from torch.optim import Adam
 from tqdm import tqdm
+from PIL import Image
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,18 +46,30 @@ class SSupervised(object) :
         # =============================================
         #   노이즈 이미지 생성
         # =============================================
-        # self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode, var=1)         # ...   0805 noise param = 0 
+        # self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode, var=1)        
         # self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode)                # ...   0808 normalize image 
         self.noisy_image = random_noise(self.img_norm, mode = self.p.noise_mode)
-
+        
         # self.noisy_image = random_noise(self.img_resize, params = 'gaussian', var=3)        
-        # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])                       # ...   0728 test - without adding noise
+        # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
         self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
+        
+        
+        # =============================================
+        #   Minus Gaussian 
+        # =============================================
+        t = np.array([0.05]*640000)
+        test_filter = torch.FloatTensor(t)
+        test_filter = test_filter.view(self.noisy.shape)
+        self.noisy = self.noisy - test_filter
+        
+        np.where(self.noisy < 0, 0, self.noisy)     # ...       0810 after minus avg point (0.5), fix each pixel value
+        
 
         # =============================================
         #   Masking 
         # =============================================
-        self.masker = Masker(width = 5, mode=self.p.mask_mode)
+        self.masker = Masker(width = 25, mode=self.p.mask_mode)
         
         self.my_address, self.my_password, self.recv_address = select_email_provider()
 
@@ -98,7 +111,7 @@ class SSupervised(object) :
         self.val_losses = []
         self.best_images = []
         self.best_val_loss = 1
-        self.save_img_param = 0                                      # .. for save updated image parameter
+        self.save_img_param = 0                                 # .. for save best image parameter
         self.learning_rate = self.p.lr
         self.epoch = self.p.epoch
 
@@ -114,6 +127,90 @@ class SSupervised(object) :
         self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         pass
+    
+    
+    def work__train__(self) : 
+        
+        self.best_val_loss = 1
+        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
+        self.ckpt_cnt_by_epoch = 0
+        div_point = 100 
+        self.psnr_ls = dict() 
+        loss_function = MSELoss()
+        optimizer = Adam(self.model.parameters(), 
+                        lr=self.learning_rate
+                        )
+        
+        i = 0
+        for _ in range(self.epoch//div_point):
+            target_dic = {'10': []}
+
+            for _ in tqdm(range(div_point), desc="Train Process") :
+                
+                self.model.train()
+            
+                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
+                net_output = self.model(net_input)
+                
+                loss = loss_function(net_output*mask, self.noisy*mask)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                
+                if i % 10 == 0 : 
+                    self.losses.append(loss.item())
+                    self.model.eval()
+                    
+                    net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
+                    net_output = self.model(net_input)
+                
+                    val_loss = loss_function(net_output*mask, self.noisy*mask)
+                    
+                    self.val_losses.append(val_loss.item())
+                    
+                    idx_loss = round(loss.item(), 5)
+                    idx_val_loss = round(val_loss.item(), 5)
+                    
+                    # check runtime error 
+                    if i == 0 : 
+                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+                    
+                    if val_loss < self.best_val_loss:
+                        self.best_val_loss = val_loss
+                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+                        # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
+                        best_psnr = psnr(denoised, self.img_resize)                    
+                        # self.best_images.append(denoised)                     # ...     0809 add all images, not only best cut 
+                        if np.round(best_psnr, 5) not in self.psnr_ls.keys() : 
+                            self.psnr_ls[np.round(best_psnr, 5)] = i
+
+                    self.best_images.append(denoised)
+
+
+                    target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
+                    self.cell_update_dict['10'] += 1
+                # ===========================================================
+                r'''
+                for div in target_dic.keys() : 
+                    if i%int(div) == 0 : 
+                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
+                        self.cell_update_dict[div] += 1
+                    else : 
+                        break
+                '''
+                i += 1
+                self.work_save_model(self.model, i)       # ... save ckpt - test 
+                time.sleep(0.05)
+
+            # update information & check end of epoch 
+            if i % div_point == 0 and i > 0 : 
+                self.__save_csv__(target_dic)
+                print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
+                print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
+                print('='.ljust(65, '='))
+                self.__save__(i)
+                self.__update_info__()
+                
     
     # =============================================
     #   Training
@@ -173,141 +270,17 @@ class SSupervised(object) :
                     # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
                     best_psnr = psnr(denoised, self.img_resize)                    
                     self.best_images.append(denoised)
-                    np.round(best_psnr, 5)
-                    if np.round(best_psnr, 5) not in self.psnr_ls.keys() : 
-                        self.psnr_ls[np.round(best_psnr, 5)] = i
+                    np.round(best_psnr, 2)
+                    if np.round(best_psnr, 2) not in self.psnr_ls.keys() : 
+                        self.psnr_ls[np.round(best_psnr, 2)] = i
 
                 for div in target_dic.keys() : 
                     if i%int(div) == 0 : 
-                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
+                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
                         self.cell_update_dict[div] += 1
                     else : 
                         break
 
-                i += 1
-                self.work_save_model(self.model, i)       # ... save ckpt - test 
-                time.sleep(0.05)
-
-            # update information & check end of epoch 
-            if i % div_point == 0 and i > 0 : 
-                self.__save_csv__(target_dic)
-                print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
-                print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
-                print('='.ljust(65, '='))
-                self.__save__(i)
-                self.__update_info__()
-
-
-    # =============================================
-    #   Training - Test
-    # =============================================
-
-    r'''
-    losses = []
-    val_losses = []
-    best_images = []    
-    best_val_loss = 1
-
-    for i in range(100):
-        model.train()
-        
-        net_input, mask = masker.mask(noisy, i % (masker.n_masks - 1))
-        net_output = model(net_input)
-        
-        loss = loss_function(net_output*mask, noisy*mask)
-        optimizer.zero_grad()
-    
-        loss.backward()
-        
-        optimizer.step()
-        
-        if i % 10 == 0:
-            losses.append(loss.item())
-            model.eval()
-            
-            net_input, mask = masker.mask(noisy, masker.n_masks - 1)
-            net_output = model(net_input)
-        
-            val_loss = loss_function(net_output*mask, noisy*mask)
-            
-            val_losses.append(val_loss.item())
-            
-            print("(", i, ") Loss: \t", round(loss.item(), 5), "\tVal Loss: \t", round(val_loss.item(), 5))
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                denoised = np.clip(model(noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                best_psnr = psnr(denoised, noisy_image)
-                best_images.append(denoised)
-                print("\tModel PSNR: ", np.round(best_psnr, 2))
-    '''
-
-
-    def work__train__(self) : 
-        
-        self.best_val_loss = 1
-        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
-        self.ckpt_cnt_by_epoch = 0
-        div_point = 100 
-        self.psnr_ls = dict() 
-        loss_function = MSELoss()
-        optimizer = Adam(self.model.parameters(), 
-                        lr=self.learning_rate
-                        )
-        
-        i = 0
-        for _ in range(self.epoch//div_point):
-            target_dic = {'10': []}
-
-            for _ in tqdm(range(div_point), desc="Train Process") :
-                
-                self.model.train()
-            
-                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
-                net_output = self.model(net_input)
-                
-                loss = loss_function(net_output*mask, self.noisy*mask)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                if i % 10 == 0 : 
-                    self.losses.append(loss.item())
-                    self.model.eval()
-                    
-                    net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
-                    net_output = self.model(net_input)
-                
-                    val_loss = loss_function(net_output*mask, self.noisy*mask)
-                    
-                    self.val_losses.append(val_loss.item())
-                    
-                    idx_loss = round(loss.item(), 5)
-                    idx_val_loss = round(val_loss.item(), 5)
-                    
-                    if val_loss < self.best_val_loss:
-                        self.best_val_loss = val_loss
-                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                        # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
-                        best_psnr = psnr(denoised, self.img_resize)                    
-                        # self.best_images.append(denoised)                     # ...     0809 add all images, not only best cut 
-                        if np.round(best_psnr, 5) not in self.psnr_ls.keys() : 
-                            self.psnr_ls[np.round(best_psnr, 5)] = i
-
-                    self.best_images.append(denoised)
-
-
-                    target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
-                    self.cell_update_dict['10'] += 1
-                # ===========================================================
-                r'''
-                for div in target_dic.keys() : 
-                    if i%int(div) == 0 : 
-                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
-                        self.cell_update_dict[div] += 1
-                    else : 
-                        break
-                '''
                 i += 1
                 self.work_save_model(self.model, i)       # ... save ckpt - test 
                 time.sleep(0.05)

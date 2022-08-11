@@ -18,10 +18,12 @@ class Masker():
         phasex = i % self.grid_size
         phasey = (i // self.grid_size) % self.grid_size
         mask = pixel_grid_mask(X[0, 0].shape, self.grid_size, phasex, phasey)
+        # print(f'\n\n** mask : {mask}')
+        
         mask = mask.to(X.device)
 
         mask_inv = torch.ones(mask.shape).to(X.device) - mask
-
+        # print(f'\n** mask_inv : {mask_inv}')
         if self.mode == 'interpolate':
             masked = interpolate_mask(X, mask, mask_inv)
         elif self.mode == 'zero':
@@ -64,11 +66,18 @@ class Masker():
 
 
 def pixel_grid_mask(shape, patch_size, phase_x, phase_y):
+    # print(f'** shape[-2:] : {shape[-2:]}')
+    
     A = torch.zeros(shape[-2:])
+    # print(f'** A : {A}')
+    # cnt = 0 
     for i in range(shape[-2]):
         for j in range(shape[-1]):
             if (i % patch_size == phase_x and j % patch_size == phase_y):
                 A[i, j] = 1
+                # print(f'** A : {A}')
+                # cnt += 1
+    # print(f'** cnt : {cnt}')
     return torch.Tensor(A)
 
 
