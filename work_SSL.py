@@ -1,3 +1,5 @@
+from models.models import get_model
+from models.unet import Unet
 from util import select_email_provider, send_email_to, show, plot_images, plot_tensors, create_montage
 from skimage.morphology import disk
 from skimage.filters import gaussian, median
@@ -54,7 +56,7 @@ class SSupervised(object) :
         # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
         self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
         
-        
+        r'''
         # =============================================
         #   Minus Gaussian 
         # =============================================
@@ -64,7 +66,7 @@ class SSupervised(object) :
         self.noisy = self.noisy - test_filter
         
         np.where(self.noisy < 0, 0, self.noisy)     # ...       0810 after minus avg point (0.5), fix each pixel value
-        
+        '''
 
         # =============================================
         #   Masking 
@@ -109,7 +111,6 @@ class SSupervised(object) :
         self.cell_VALID_LOSS = chr(ord(self.csv_first_cell)+3)
         self.losses = []
         self.val_losses = []
-        self.best_images = []
         self.best_val_loss = 1
         self.save_img_param = 0                                 # .. for save best image parameter
         self.learning_rate = self.p.lr
@@ -120,14 +121,18 @@ class SSupervised(object) :
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
         self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        # self.model = Unet(1, num_of_layers = self.p.cnn_layer)
+        # self.model = get_model("unet", 1, 1)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
 
+    r'''
     def __set_test__(self) : 
-        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        # self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        self.model = Unet(1, num_of_layers = self.p.cnn_layer)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         pass
-    
+    '''
     
     def work__train__(self) : 
         
@@ -144,6 +149,7 @@ class SSupervised(object) :
         i = 0
         for _ in range(self.epoch//div_point):
             target_dic = {'10': []}
+            best_images = []
 
             for _ in tqdm(range(div_point), desc="Train Process") :
                 
@@ -184,7 +190,7 @@ class SSupervised(object) :
                         if np.round(best_psnr, 5) not in self.psnr_ls.keys() : 
                             self.psnr_ls[np.round(best_psnr, 5)] = i
 
-                    self.best_images.append(denoised)
+                    best_images.append(denoised)
 
 
                     target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
@@ -199,7 +205,7 @@ class SSupervised(object) :
                         break
                 '''
                 i += 1
-                self.work_save_model(self.model, i)       # ... save ckpt - test 
+                # self.work_save_model(self.model, i)       # ... save ckpt - test 
                 time.sleep(0.05)
 
             # update information & check end of epoch 
@@ -208,10 +214,10 @@ class SSupervised(object) :
                 print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
                 print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
                 print('='.ljust(65, '='))
-                self.__save__(i)
+                self.__save__(i, best_images)
                 self.__update_info__()
                 
-    
+    r'''
     # =============================================
     #   Training
     # =============================================
@@ -293,17 +299,21 @@ class SSupervised(object) :
                 print('='.ljust(65, '='))
                 self.__save__(i)
                 self.__update_info__()
-
+    '''
            
 
     # =============================================
     #   Save Image - Sequence
     # =============================================
-    def __save__(self, _epoch) : 
+    def __save__(self, _epoch, _images) : 
         assert 'images' in os.listdir(f'./results/{self.dir_title_by_date}/{self.record_train_time}'), f'\n\n** No such directory : " images "'
-        if len(self.best_images[self.save_img_param:len(self.best_images)]) > 1 : 
-            plot_images(self.best_images[self.save_img_param:len(self.best_images)])
-            self.save_img_param = len(self.best_images)
+
+        # if len(self.best_images[self.save_img_param:len(self.best_images)]) > 1 : 
+        if len(_images) > 1 : 
+            # plot_images(self.best_images[self.save_img_param:len(self.best_images)])
+            plot_images(_images)
+            # self.save_img_param = len(self.best_images)
+
             savePath = f'./results/{self.dir_title_by_date}/{self.record_train_time}/images/sequence_{self.plt_image_title}-{_epoch}.png'
             plt.savefig(savePath)
 
