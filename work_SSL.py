@@ -1,3 +1,4 @@
+from models.babyunet import BabyUnet
 from models.models import get_model
 from models.unet import Unet
 from util import select_email_provider, send_email_to, show, plot_images, plot_tensors, create_montage
@@ -44,17 +45,21 @@ class SSupervised(object) :
         self.img_cv_gray = cv2.cvtColor(self.img_gray, cv2.COLOR_BGR2GRAY)
         self.img_resize = resize(self.img_cv_gray, (self.p.resize,self.p.resize))
         self.img_norm = cv2.normalize(self.img_resize, None, 0, 255, cv2.NORM_MINMAX)
+        # print(f'self.img_norm : {self.img_norm} \n\n')
         
         # =============================================
         #   노이즈 이미지 생성
         # =============================================
         # self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode, var=1)        
         # self.noisy_image = random_noise(self.img_resize, mode = self.p.noise_mode)                # ...   0808 normalize image 
-        self.noisy_image = random_noise(self.img_norm, mode = self.p.noise_mode)
+        # self.noisy_image = random_noise(self.img_norm, mode = self.p.noise_mode, var=0)
         
-        # self.noisy_image = random_noise(self.img_resize, params = 'gaussian', var=3)        
+        # self.noisy_image = random_noise(self.img_norm, params = 'gaussian', var=3)        
         # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
         self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
+        # self.noisy = torch.Tensor(self.img_resize)
+        print(f'self.noisy.shape : {self.noisy.shape} \n\n')
+        print(f'self.noisy : {self.noisy}\n\n')
         
         r'''
         # =============================================
@@ -71,7 +76,7 @@ class SSupervised(object) :
         # =============================================
         #   Masking 
         # =============================================
-        self.masker = Masker(width = 25, mode=self.p.mask_mode)
+        self.masker = Masker(width = 4, mode=self.p.mask_mode)
         
         self.my_address, self.my_password, self.recv_address = select_email_provider()
 
@@ -120,8 +125,8 @@ class SSupervised(object) :
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
-        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
-        # self.model = Unet(1, num_of_layers = self.p.cnn_layer)
+        # self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        self.model = BabyUnet()
         # self.model = get_model("unet", 1, 1)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
