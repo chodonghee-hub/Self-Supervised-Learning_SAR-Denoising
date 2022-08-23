@@ -44,9 +44,29 @@ class SSupervised(object) :
         self.img_gray = cv2.imread(os.path.join(self.p.img_path, self.p.img_file_name)) 
         self.img_cv_gray = cv2.cvtColor(self.img_gray, cv2.COLOR_BGR2GRAY)
         self.img_resize = resize(self.img_cv_gray, (self.p.resize,self.p.resize))
-        self.img_norm = cv2.normalize(self.img_resize, None, 0, 255, cv2.NORM_MINMAX)
+        # self.img_norm = cv2.normalize(self.img_resize, None, 0, 255, cv2.NORM_MINMAX)
         # print(f'self.img_norm : {self.img_norm} \n\n')
         
+        
+        # =============================================
+        #   색상 전환, AHGN
+        # =============================================
+        flag = torch.Tensor(np.array([255]*self.p.resize*self.p.resize))
+        self.fFlag = torch.FloatTensor(flag)
+        self.fFlag = self.fFlag.view(self.img_resize.shape)
+        fImg_dark = self.fFlag - self.img_resize 
+
+        ahgn = torch.Tensor(np.array([127.5]*(self.p.resize**2)))
+        ahgn = torch.FloatTensor(ahgn)
+        ahgn = ahgn.view(fImg_dark.shape)
+
+        self.minus_gaussian = fImg_dark - ahgn
+        self.minus_gaussian = np.array(self.minus_gaussian)
+        self.minus_gaussian = np.where(self.minus_gaussian < 0, 0, self.minus_gaussian)
+        self.minus_gaussian = torch.Tensor(self.minus_gaussian)
+        print(self.minus_gaussian)
+
+
         # =============================================
         #   노이즈 이미지 생성
         # =============================================
@@ -57,6 +77,7 @@ class SSupervised(object) :
         # self.noisy_image = random_noise(self.img_norm, params = 'gaussian', var=3)        
         # self.noisy = torch.Tensor(self.noisy_image[np.newaxis, np.newaxis])         # ...     0728 test - without adding noise
         self.noisy = torch.Tensor(self.img_resize[np.newaxis, np.newaxis])
+        # self.noisy = torch.Tensor(self.minus_gaussian[np.newaxis, np.newaxis])
         # self.noisy = torch.Tensor(self.img_resize)
         print(f'self.noisy.shape : {self.noisy.shape} \n\n')
         print(f'self.noisy : {self.noisy}\n\n')
@@ -95,7 +116,7 @@ class SSupervised(object) :
     def __del__(self) : 
         if self.SMTP != '' : 
             self.SMTP.quit()
-        print('\n\n** SMTP quit ! \n\n')
+            print('\n\n** SMTP quit ! \n\n')
 
     def __set_train__(self) : 
 
@@ -125,8 +146,8 @@ class SSupervised(object) :
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
-        # self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
-        self.model = BabyUnet()
+        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        # self.model = BabyUnet()
         # self.model = get_model("unet", 1, 1)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 
@@ -140,6 +161,7 @@ class SSupervised(object) :
     '''
     
     def work__train__(self) : 
+        global plt
         
         self.best_val_loss = 1
         best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
@@ -152,17 +174,42 @@ class SSupervised(object) :
                         )
         
         i = 0
+        last_output = ''
         for _ in range(self.epoch//div_point):
             target_dic = {'10': []}
             best_images = []
+            ahgn_images = []
+
+            r'''
+            [ fix plt error ]
+            >>> Fail to create pixmap with Tk_GetPixmap in TkImgPhotoInstanceSetSize
+
+            [ Memo ]
+            반복적으로 plt를 호출 하다보면 메모리를 초과하거나 과도한 반복으로 인해 에러가 발생한다. 
+            plt 할당을 초기화 해주고, 메모리를 재지정 해준다. 
+            '''
+            if i % 2000 == 0 and i > 0: 
+                del plt 
+                from matplotlib import pyplot as plt 
+
 
             for _ in tqdm(range(div_point), desc="Train Process") :
                 
                 self.model.train()
-            
+
+                r'''
+                loss_function(before, after)
+                '''
                 net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
                 net_output = self.model(net_input)
                 
+                r'''
+                if last_output == '' : 
+                    loss = loss_function(net_output*mask, self.noisy*mask)
+                else : 
+                    loss = loss_function(last_output, net_output*mask)
+                '''
+
                 loss = loss_function(net_output*mask, self.noisy*mask)
                 optimizer.zero_grad()
                 loss.backward()
@@ -174,28 +221,39 @@ class SSupervised(object) :
                     
                     net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
                     net_output = self.model(net_input)
-                
+
+                    r'''
+                    if last_output == '' : 
+                        val_loss = loss_function(net_output*mask, self.noisy*mask)
+                    else : 
+                        val_loss = loss_function(last_output, net_output*mask)
+                    '''
+
                     val_loss = loss_function(net_output*mask, self.noisy*mask)
-                    
                     self.val_losses.append(val_loss.item())
                     
                     idx_loss = round(loss.item(), 5)
                     idx_val_loss = round(val_loss.item(), 5)
-                    
+                    denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+
                     # check runtime error 
+                    r'''
                     if i == 0 : 
                         denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                    
+                    '''
                     if val_loss < self.best_val_loss:
                         self.best_val_loss = val_loss
-                        denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
+                        # denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
                         # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
                         best_psnr = psnr(denoised, self.img_resize)                    
                         # self.best_images.append(denoised)                     # ...     0809 add all images, not only best cut 
                         if np.round(best_psnr, 5) not in self.psnr_ls.keys() : 
                             self.psnr_ls[np.round(best_psnr, 5)] = i
-
+                    
                     best_images.append(denoised)
+                    # best_images.append(self.fFlag - denoised)
+                    # best_images.append(last_output)
+                    # ahgn_images.append()
 
 
                     target_dic['10'].append([f"{i}/{self.epoch}", np.round(best_psnr, 5), idx_loss, idx_val_loss])
@@ -369,7 +427,8 @@ class SSupervised(object) :
     #   CSV Update Information  
     # =============================================
     def __update_info__(self) : 
-        print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
+        if self.psnr_ls != {} : 
+            print(f"{' ( Besat PSNR )'.ljust(20, ' ')}{'PSNR : '.rjust(20, ' ')}{str(max(self.psnr_ls.keys())).rjust(5, ' ')}{'EPOCH : '.rjust(15, ' ')}{str(self.psnr_ls.get(max(self.psnr_ls.keys()))).rjust(5, ' ')}")
         print(f" ○ {'Saved Check point : '.ljust(31, ' ')}{str(self.ckpt_cnt_by_epoch).rjust(30, ' ')}")        
         self.ckpt_cnt_by_epoch = 0 
         print(f" {'○ Sheet Title'.ljust(36,' ')}", end = '')

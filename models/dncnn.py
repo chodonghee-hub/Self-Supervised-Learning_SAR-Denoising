@@ -26,9 +26,10 @@ class DnCNN(nn.Module):
 class work_DnCNN(nn.Module) : 
     def __init__(self, channels, num_of_layers = 7) : 
         super(work_DnCNN, self).__init__()
-        kernel_size = 3
+        kernel_size = 11
         padding = 1
-        features = 64
+        features = 256
+        # features = 64
         self.num_of_layers = num_of_layers
         r'''
         layers = []
@@ -63,11 +64,18 @@ class work_DnCNN(nn.Module) :
             ),
             nn.BatchNorm2d(features),
             nn.ReLU(inplace=True),
+            
+            
             nn.MaxPool2d(
-                kernel_size=kernel_size,
-                stride=kernel_size,
-                # padding=padding
-            ),
+                kernel_size=11,
+                stride=2,
+            ),            
+            
+            # nn.AvgPool2d(
+                # kernel_size=5,
+                # stride=1,
+            # ),
+            
             nn.Dropout()
         )
 

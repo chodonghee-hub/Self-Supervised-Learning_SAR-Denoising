@@ -66,10 +66,12 @@ class Masker():
 
 
 def pixel_grid_mask(shape, patch_size, phase_x, phase_y):
-    # print(f'** shape[-2:] : {shape[-2:]}')
+    # print(f'\n** shape[-2:] : {shape[-2:]}')
     
     A = torch.zeros(shape[-2:])
+    # print(f'** A.shpae : {A.shape}')
     # print(f'** A : {A}')
+    
     # cnt = 0 
     for i in range(shape[-2]):
         for j in range(shape[-1]):
@@ -78,6 +80,7 @@ def pixel_grid_mask(shape, patch_size, phase_x, phase_y):
                 # print(f'** A : {A}')
                 # cnt += 1
     # print(f'** cnt : {cnt}')
+    # print(f'** A : {A}')
     return torch.Tensor(A)
 
 
