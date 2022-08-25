@@ -8,7 +8,7 @@ from skimage.util import random_noise
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.transform import resize
 from mask import Masker
-from models.dncnn import DnCNN
+from models.dncnn import DnCNN, work_DnCNN
 from torch.nn import MSELoss
 from torch.optim import Adam
 from tqdm import tqdm
@@ -44,6 +44,7 @@ class SSupervised(object) :
         self.img_gray = cv2.imread(os.path.join(self.p.img_path, self.p.img_file_name)) 
         self.img_cv_gray = cv2.cvtColor(self.img_gray, cv2.COLOR_BGR2GRAY)
         self.img_resize = resize(self.img_cv_gray, (self.p.resize,self.p.resize))
+        # self.img_resize = cv2.equalizeHist(self.img_resize)
         # self.img_norm = cv2.normalize(self.img_resize, None, 0, 255, cv2.NORM_MINMAX)
         # print(f'self.img_norm : {self.img_norm} \n\n')
         
@@ -146,7 +147,7 @@ class SSupervised(object) :
         for sheet in self.sheet_info_list : 
             self.cell_info_dict[sheet] = self.first_cell_info - 1
             self.cell_update_dict[sheet] = 0
-        self.model = DnCNN(1, num_of_layers = self.p.cnn_layer)
+        self.model = work_DnCNN(1, num_of_layers = self.p.cnn_layer)
         # self.model = BabyUnet()
         # self.model = get_model("unet", 1, 1)
         sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -279,91 +280,7 @@ class SSupervised(object) :
                 print('='.ljust(65, '='))
                 self.__save__(i, best_images)
                 self.__update_info__()
-                
-    r'''
-    # =============================================
-    #   Training
-    # =============================================
-    def __train__(self) : 
-        
-        self.best_val_loss = 1
-        best_psnr, idx_loss, idx_val_loss = 0, 0, 0 
-        self.ckpt_cnt_by_epoch = 0
-        div_point = 100 
-        self.psnr_ls = dict() 
-        loss_function = MSELoss()
-        optimizer = Adam(self.model.parameters(), 
-                        lr=self.learning_rate
-                        )
-
-         # CUDA support
-        self.use_cuda = torch.cuda.is_available()
-        if self.use_cuda:
-            self.model = self.model.cuda()
-            loss_function = loss_function.cuda()
-
-        
-        i = 0
-        for _ in range(self.epoch//div_point):
-            target_dic = {'1': [], '5': [], '10': []}
-
-            for _ in tqdm(range(div_point), desc="Train Process") :
-                
-                self.model.train()
-            
-                # net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks - 1))
-                net_input, mask = self.masker.mask(self.noisy, i % (self.masker.n_masks))
-                net_output = self.model(net_input)
-                
-                loss = loss_function(net_output*mask, self.noisy*mask)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                self.losses.append(loss.item())
-                self.model.eval()
-                
-                net_input, mask = self.masker.mask(self.noisy, self.masker.n_masks - 1)
-                net_output = self.model(net_input)
-            
-                val_loss = loss_function(net_output*mask, self.noisy*mask)
-                
-                self.val_losses.append(val_loss.item())
-                
-                idx_loss = round(loss.item(), 5)
-                idx_val_loss = round(val_loss.item(), 5)
-                
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
-                    denoised = np.clip(self.model(self.noisy).detach().cpu().numpy()[0, 0], 0, 1).astype(np.float64)
-                    # best_psnr = psnr(denoised, self.noisy_image)        # ...     0728 test - without adding noise
-                    best_psnr = psnr(denoised, self.img_resize)                    
-                    self.best_images.append(denoised)
-                    np.round(best_psnr, 2)
-                    if np.round(best_psnr, 2) not in self.psnr_ls.keys() : 
-                        self.psnr_ls[np.round(best_psnr, 2)] = i
-
-                for div in target_dic.keys() : 
-                    if i%int(div) == 0 : 
-                        target_dic[div].append([f"{i}/{self.epoch}", np.round(best_psnr, 2), idx_loss, idx_val_loss])
-                        self.cell_update_dict[div] += 1
-                    else : 
-                        break
-
-                i += 1
-                self.work_save_model(self.model, i)       # ... save ckpt - test 
-                time.sleep(0.05)
-
-            # update information & check end of epoch 
-            if i % div_point == 0 and i > 0 : 
-                self.__save_csv__(target_dic)
-                print(f"\n\n ● [ {i}/{self.epoch} ]", end = '')
-                print(f"{'LOSS'.rjust(15, ' ')}{str(idx_loss).rjust(10, ' ')}{'VAL LOSS'.rjust(15, ' ')}{str(idx_val_loss).rjust(10, ' ')}")
-                print('='.ljust(65, '='))
-                self.__save__(i)
-                self.__update_info__()
-    '''
-           
+   
 
     # =============================================
     #   Save Image - Sequence
